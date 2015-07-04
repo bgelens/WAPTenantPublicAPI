@@ -6,9 +6,16 @@ A PowerShell module which enables you to deploy VM Roles through the Windows Azu
 Requirements
 ------------
 
-Tenant Public Api needs to be configured for HybridTenant mode to allow token based authentication.
-The Tenant Public Api by default does not have enough permissions in the database to function correctly.
-Missing execute permissions can be resolved by running the following TSQL script:
+Tenant Public Api needs to be configured for HybridTenant mode to allow token based authentication besided Cert based authentication.
+```powershell
+Unprotect-MgmtSvcConfiguration -Namespace tenantpublicapi
+Set-WebConfigurationProperty -pspath IIS:\Sites\MgmtSvc-TenantPublicAPI  -filter "appSettings/add[@key='TenantServiceMode']" -name "value" -value "HybridTenant"
+Protect-MgmtSvcConfiguration -Namespace tenantpublicapi
+```
+
+The Tenant Api by default does not have enough permissions in the database to function correctly. 
+Permissions involved with executing stored procedures to validate CoAdmin and User Tokens are missing.
+Missing permissions can be resolved by running the following TSQL script:
 ```sql
 USE [Microsoft.MgmtSvc.Store]
 GO

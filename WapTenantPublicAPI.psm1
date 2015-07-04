@@ -765,6 +765,7 @@ function New-WAPVMRoleParameterObject {
         }
         
     }
+    $Output.PSObject.TypeNames.Insert(0,'WAP.ParameterObject')
     Write-Output -InputObject $Output
 }
 
@@ -1141,6 +1142,16 @@ function New-WAPVMRoleDeployment {
     process {
         if (!($VMRole.pstypenames.Contains('MicrosoftCompute.VMRoleGalleryItem'))) {
             throw 'Object bound to VMRole parameter is of the wrong type'
+        }
+
+        if (!($ParameterObject.pstypenames.Contains('WAP.ParameterObject'))) {
+            throw 'Object bound to ParameterObject parameter is of the wrong type'
+        }
+
+        $ParameterObject | gm -MemberType Properties | %{
+            if ($ParameterObject.($_.name) -eq $null) {
+                throw "ParameterObject property: $($_.name) is NULL"
+            }
         }
 
         $ErrorActionPreference = 'Stop'

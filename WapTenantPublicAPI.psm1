@@ -26,6 +26,36 @@
         [System.Net.ServicePointManager]::CertificatePolicy = $TrustAll
 }
 
+function TestJWTClaimNotExpired {
+    param (
+        [Parameter(Mandatory,
+                   ValueFromPipeline,
+                   ValueFromPipelineByPropertyName)]
+        [ValidateScript({if ($_.split('.').count -eq 3) {$true}})]
+        [String] $Token
+    )
+    process {
+        try {
+            $TokenData = $token.Split('.')[1] |%{
+                [System.Text.Encoding]::UTF8.GetString([convert]::FromBase64String($_)) | ConvertFrom-Json
+            }
+            #JWT Reference Time
+            $Ref = [datetime]::SpecifyKind((New-Object -TypeName datetime ('1970',1,1,0,0,0)),'UTC')
+            #UTC time right now - Reference time gives amount of seconds to check against
+            $CheckSeconds = [System.Math]::Round(([datetime]::UtcNow - $Ref).totalseconds)
+            if ($TokenData.exp -gt $CheckSeconds) {
+                Write-Output -InputObject $true
+            }
+            else {
+                Write-Output -InputObject $false
+            }
+        }
+        catch {
+            throw $_
+        }
+    }
+}
+
 function Get-WAPAdfsToken {
     [cmdletbinding(DefaultParameterSetName='Tenant')]
     param (
@@ -218,7 +248,7 @@ function Get-WAPSubscription {
 
         [Switch] $IgnoreSSL
     )
-    
+
     try {
         if ($IgnoreSSL) {
             Write-Warning 'IgnoreSSL switch defined. Certificate errors will be ignored!'
@@ -226,6 +256,12 @@ function Get-WAPSubscription {
             $OriginalCertificatePolicy = [System.Net.ServicePointManager]::CertificatePolicy
             IgnoreSSL
         }
+
+        Write-Verbose 'Validating Token not expired'
+        if (!(TestJWTClaimNotExpired -Token $Token)) {
+            throw 'Token has expired, fetch a new one!'
+        }
+
         Write-Verbose 'Constructing Header'
         $Headers = @{
                 Authorization = "Bearer $Token"
@@ -262,7 +298,7 @@ function Get-WAPSubscription {
         }
     } 
     catch {
-        $_
+        throw $_
     }
     finally {
         #Change Certificate Policy to the original
@@ -333,6 +369,12 @@ function Get-WAPGalleryVMRole {
                 $OriginalCertificatePolicy = [System.Net.ServicePointManager]::CertificatePolicy
                 IgnoreSSL
             }
+
+            Write-Verbose 'Validating Token not expired'
+            if (!(TestJWTClaimNotExpired -Token $Token)) {
+                throw 'Token has expired, fetch a new one!'
+            }
+
             Write-Verbose 'Constructing Header'
             $Headers = @{
                     Authorization = "Bearer $Token"
@@ -374,7 +416,7 @@ function Get-WAPGalleryVMRole {
             }
         }
         catch {
-            $_
+            throw $_
         }
         finally {
             #Change Certificate Policy to the original
@@ -444,6 +486,12 @@ function Get-WAPVMRoleOSDisk {
                 $OriginalCertificatePolicy = [System.Net.ServicePointManager]::CertificatePolicy
                 IgnoreSSL
             }
+
+            Write-Verbose 'Validating Token not expired'
+            if (!(TestJWTClaimNotExpired -Token $Token)) {
+                throw 'Token has expired, fetch a new one!'
+            }
+
             Write-Verbose 'Constructing Header'
             $Headers = @{
                     Authorization = "Bearer $Token"
@@ -474,7 +522,7 @@ function Get-WAPVMRoleOSDisk {
             }                
         }
         catch {
-            $_
+            throw $_
         }
         finally {
             #Change Certificate Policy to the original
@@ -545,6 +593,12 @@ function Get-WAPVMNetwork {
                 $OriginalCertificatePolicy = [System.Net.ServicePointManager]::CertificatePolicy
                 IgnoreSSL
             }
+
+            Write-Verbose 'Validating Token not expired'
+            if (!(TestJWTClaimNotExpired -Token $Token)) {
+                throw 'Token has expired, fetch a new one!'
+            }
+
             Write-Verbose 'Constructing Header'
             $Headers = @{
                     Authorization = "Bearer $Token"
@@ -566,7 +620,7 @@ function Get-WAPVMNetwork {
             }
         }
         catch {
-            $_
+            throw $_
         }
         finally {
             #Change Certificate Policy to the original
@@ -776,6 +830,12 @@ function Get-WAPCloudService {
                 $OriginalCertificatePolicy = [System.Net.ServicePointManager]::CertificatePolicy
                 IgnoreSSL
             }
+
+            Write-Verbose 'Validating Token not expired'
+            if (!(TestJWTClaimNotExpired -Token $Token)) {
+                throw 'Token has expired, fetch a new one!'
+            }
+
             Write-Verbose 'Constructing Header'
             $Headers = @{
                     Authorization = "Bearer $Token"
@@ -807,7 +867,7 @@ function Get-WAPCloudService {
             }
         }
         catch {
-            $_
+            throw $_
         }
         finally {
             #Change Certificate Policy to the original
@@ -876,6 +936,12 @@ function New-WAPCloudService {
                 $OriginalCertificatePolicy = [System.Net.ServicePointManager]::CertificatePolicy
                 IgnoreSSL
             }
+
+            Write-Verbose 'Validating Token not expired'
+            if (!(TestJWTClaimNotExpired -Token $Token)) {
+                throw 'Token has expired, fetch a new one!'
+            }
+
             Write-Verbose 'Constructing Header'
             $Headers = @{
                     Authorization = "Bearer $Token"
@@ -897,7 +963,7 @@ function New-WAPCloudService {
             Write-Output -InputObject $CloudService
         }
         catch {
-            $_
+            throw $_
         }
         finally {
             #Change Certificate Policy to the original
@@ -975,6 +1041,12 @@ function Remove-WAPCloudService {
                 $OriginalCertificatePolicy = [System.Net.ServicePointManager]::CertificatePolicy
                 IgnoreSSL
             }
+
+            Write-Verbose 'Validating Token not expired'
+            if (!(TestJWTClaimNotExpired -Token $Token)) {
+                throw 'Token has expired, fetch a new one!'
+            }
+
             Write-Verbose 'Constructing Header'
             $Headers = @{
                     Authorization = "Bearer $Token"
@@ -998,7 +1070,7 @@ function Remove-WAPCloudService {
             }
         }
         catch {
-            $_
+            throw $_
         }
         finally {
             #Change Certificate Policy to the original
@@ -1082,6 +1154,11 @@ function New-WAPVMRoleDeployment {
                 $OriginalCertificatePolicy = [System.Net.ServicePointManager]::CertificatePolicy
                 IgnoreSSL
             }
+
+            Write-Verbose 'Validating Token not expired'
+            if (!(TestJWTClaimNotExpired -Token $Token)) {
+                throw 'Token has expired, fetch a new one!'
+            }
                         
             Write-Verbose -Message "Testing if Cloudservice $CloudServiceName exists"
             if (!($SUB | Get-WAPCloudService)) {
@@ -1139,7 +1216,7 @@ function New-WAPVMRoleDeployment {
             if ($New) {
                 $SUB | Remove-WAPCloudService -Force
             }
-            $_
+            throw $_
         }
         finally {
             #Change Certificate Policy to the original
@@ -1211,6 +1288,12 @@ function Get-WAPVMRole {
                 $OriginalCertificatePolicy = [System.Net.ServicePointManager]::CertificatePolicy
                 IgnoreSSL
             }
+
+            Write-Verbose 'Validating Token not expired'
+            if (!(TestJWTClaimNotExpired -Token $Token)) {
+                throw 'Token has expired, fetch a new one!'
+            }
+
             Write-Verbose 'Constructing Header'
             $Headers = @{
                     Authorization = "Bearer $Token"
@@ -1228,7 +1311,7 @@ function Get-WAPVMRole {
             }
         }
         catch {
-            $_
+            throw $_
         }
         finally {
             #Change Certificate Policy to the original

@@ -34,10 +34,19 @@ function TestJWTClaimNotExpired {
         [ValidateScript({if ($_.split('.').count -eq 3) {$true}})]
         [String] $Token
     )
+    #based on functions by Shriram MSFT found on technet: https://gallery.technet.microsoft.com/JWT-Token-Decode-637cf001
     process {
         try {
             $TokenData = $token.Split('.')[1] |%{
-                [System.Text.Encoding]::UTF8.GetString([convert]::FromBase64String($_)) | ConvertFrom-Json
+                $data = $_ -as [String]
+                $data = $data.Replace('-', '+').Replace('_', '/')
+                switch ($data.Length % 4) {
+                    0 { break }
+                    2 { $data += '==' }
+                    3 { $data += '=' }
+                    default { throw New-Object ArgumentException('data') }
+                }
+                [System.Text.Encoding]::UTF8.GetString([convert]::FromBase64String($data)) | ConvertFrom-Json
             }
             #JWT Reference Time
             $Ref = [datetime]::SpecifyKind((New-Object -TypeName datetime ('1970',1,1,0,0,0)),'UTC')
@@ -1317,6 +1326,10 @@ function Get-WAPVMRole {
 
             $Roles = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
             foreach ($R in $Roles.value) {
+                Add-Member -InputObject $R -MemberType NoteProperty -Name ParameterValues -Value ($R.ResourceConfiguration.ParameterValues | ConvertFrom-Json)
+                Add-Member -InputObject $R -MemberType NoteProperty -Name ScaleOutSettings -Value $R.ResourceDefinition.IntrinsicSettings.ScaleOutSettings
+                Add-Member -InputObject $R -MemberType NoteProperty -Name InstanceCount -Value $R.InstanceView.InstanceCount
+                Add-Member -InputObject $R -MemberType NoteProperty -Name VMSize -Value $R.InstanceView.ResolvedResourceDefinition.IntrinsicSettings.HardwareProfile.VMSize
                 $R.PSObject.TypeNames.Insert(0,'WAP.VMRole')
                 Write-Output -InputObject $R
             }

@@ -1,4 +1,12 @@
-﻿function IgnoreSSL {
+﻿try {
+    Add-Type -AssemblyName 'System.ServiceModel, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089'
+    Add-Type -AssemblyName 'System.IdentityModel, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089'
+}
+catch {
+    throw $_
+}
+
+function IgnoreSSL {
 	$Provider = New-Object Microsoft.CSharp.CSharpCodeProvider
 	$Compiler= $Provider.CreateCompiler()
 	$Params = New-Object System.CodeDom.Compiler.CompilerParameters
@@ -65,151 +73,81 @@ function TestJWTClaimNotExpired {
     }
 }
 
-function Get-WAPAdfsToken {
-    [cmdletbinding(DefaultParameterSetName='Tenant')]
+function Get-WAPToken {
+    [cmdletbinding()]
     param (
         [Parameter(Mandatory)]
-        [PSCredential] $Credential,
+        [string]$URL, 
+
+        [int] $Port,
+
+        [ValidateSet('http://azureservices/AdminSite','http://azureservices/TenantSite')]
+        [String] $ClientRealm = 'http://azureservices/TenantSite',
 
         [Parameter(Mandatory)]
-        [String] $URL,
+        [PSCredential]$credential,
 
-        [Int] $Port = 443,
+        [Switch] $ADFS,
 
-        [Parameter(ParameterSetName='Tenant')]
-        [Switch] $Tenant,
-
-        [Parameter(ParameterSetName='Admin')]
-        [Switch] $Admin
+        [Switch] $IgnoreSSL
     )
-
-    if ($PSCmdlet.ParameterSetName -eq 'Tenant') {
-        $applyTo = 'http://azureservices/TenantSite'
+    try {
+    if ($ADFS -and $Port -eq 0) {
+        $Port = 443
     }
-    else {
-        $applyTo = 'http://azureservices/AdminSite'
-    }
-    #http://virtualstation.azurewebsites.net/?p=4331
-    $sendTo = '{0}:{1}/adfs/services/trust/13/usernamemixed' -f $URL,$Port
-    $tokenType = 'urn:ietf:params:oauth:token-type:jwt'
-
-    $xml = @"
-    <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-                xmlns:a="http://www.w3.org/2005/08/addressing"
-                xmlns:u="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
-      <s:Header>
-        <a:Action s:mustUnderstand="1">http://docs.oasis-open.org/ws-sx/ws-trust/200512/RST/Issue</a:Action>
-        <a:To s:mustUnderstand="1">$sendTo</a:To>
-        <o:Security s:mustUnderstand="1" xmlns:o="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
-          <o:UsernameToken u:Id=" uuid-00000000-0000-0000-0000-000000000000-0">
-            <o:Username>$($Credential.UserName)</o:Username>
-            <o:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">$($Credential.GetNetworkCredential().Password)</o:Password>
-          </o:UsernameToken>
-        </o:Security>
-      </s:Header>
-      <s:Body>
-        <trust:RequestSecurityToken xmlns:trust="http://docs.oasis-open.org/ws-sx/ws-trust/200512">
-          <wsp:AppliesTo xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy">
-            <a:EndpointReference>
-              <a:Address>$applyTo</a:Address>
-            </a:EndpointReference>
-          </wsp:AppliesTo>
-          <trust:KeyType>http://docs.oasis-open.org/ws-sx/ws-trust/200512/Bearer</trust:KeyType>
-          <trust:RequestType>http://docs.oasis-open.org/ws-sx/ws-trust/200512/Issue</trust:RequestType>
-          <trust:TokenType>$tokenType</trust:TokenType>
-        </trust:RequestSecurityToken>
-      </s:Body>
-    </s:Envelope>
-"@
-
-    $tokenresponse = [xml] ($xml | Invoke-WebRequest -uri $sendto -Method Post -ContentType 'application/soap+xml' -TimeoutSec 30 -UseBasicParsing)
-
-    $tokenString = $tokenresponse.Envelope.Body.RequestSecurityTokenResponseCollection.RequestSecurityTokenResponse.RequestedSecurityToken.InnerText
-    $token = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($tokenString))
-    Write-Output -InputObject $token
-}
-
-function Get-WAPASPNetToken {
-    # PowerShell script to get security token from membership STS
-    # Copyright (c) Microsoft Corporation. All rights reserved.
-    # Function taken from WAP Examples 'C:\Program Files\Management Service\MgmtSvc-PowerShellAPI\Samples\Authentication\Get-TokenMembership.ps1'
-    # Modified by Ben Gelens, Inovativ
-    # Adjustments:
-    # Changed username password parameters to credential
-    # Remove mandatory clientrealm and added default value
-    [CmdletBinding()]
-    Param(
-        #[Parameter(Mandatory=$true)][string]$username,
-        #[Parameter(Mandatory=$true)][string]$password,
-        [Parameter(Mandatory)]
-        [PSCredential] $Credential,
-
-        [ValidateSet('http://azureservices/TenantSite','http://azureservices/AdminSite')]
-        [string] $clientRealm = 'http://azureservices/TenantSite',
-
-        [switch] $allowSelfSignCertificates,
-
-        [Parameter(Mandatory)]
-        [string] $URL,
-
-        [Int] $Port
-    )
-
-    if ($Port -eq $null -and $clientRealm -eq 'http://azureservices/TenantSite') {
+    elseif ($Port -eq 0 -and $clientRealm -eq 'http://azureservices/TenantSite') {
         $Port = 30071
     }
-    if ($Port -eq $null -and $clientRealm -eq 'http://azureservices/AdminSite') {
+    elseif ($Port -eq 0 -and $clientRealm -eq 'http://azureservices/AdminSite') {
         $Port = 30072
     }
 
-    try {
-        Add-Type -AssemblyName 'System.ServiceModel, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089'
-        Add-Type -AssemblyName 'System.IdentityModel, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089'
+    if ($ADFS) {
+        $identityProviderEndpoint = New-Object -TypeName System.ServiceModel.EndpointAddress -ArgumentList ($URL + ":$Port" + '/adfs/services/trust/13/usernamemixed')
     }
-    catch {
-        throw $_
-    }
-
-    try {
+    else {
         $identityProviderEndpoint = New-Object -TypeName System.ServiceModel.EndpointAddress -ArgumentList ($URL + ":$Port" + '/wstrust/issue/usernamemixed')
+    }
+    $identityProviderBinding = New-Object -TypeName System.ServiceModel.WS2007HttpBinding -ArgumentList ([System.ServiceModel.SecurityMode]::TransportWithMessageCredential)
+    $identityProviderBinding.Security.Message.EstablishSecurityContext = $false
+    $identityProviderBinding.Security.Message.ClientCredentialType = 'UserName'
+    $identityProviderBinding.Security.Transport.ClientCredentialType = 'None'
+ 
+    $trustChannelFactory = New-Object -TypeName System.ServiceModel.Security.WSTrustChannelFactory -ArgumentList $identityProviderBinding, $identityProviderEndpoint
+    $trustChannelFactory.TrustVersion = [System.ServiceModel.Security.TrustVersion]::WSTrust13
+ 
+    if ($IgnoreSSL) {
+        $certificateAuthentication = New-Object -TypeName System.ServiceModel.Security.X509ServiceCertificateAuthentication
+        $certificateAuthentication.CertificateValidationMode = 'None'
+        $trustChannelFactory.Credentials.ServiceCertificate.SslCertificateAuthentication = $certificateAuthentication
+    }
+    if ($ADFS) {
+        $ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToCoTaskMemUnicode($credential.Password)
+        $password = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($ptr)
+        [System.Runtime.InteropServices.Marshal]::ZeroFreeCoTaskMemUnicode($ptr)
+    }
+    $trustChannelFactory.Credentials.SupportInteractive = $false
+    $trustChannelFactory.Credentials.UserName.UserName = $credential.UserName
+    $trustChannelFactory.Credentials.UserName.Password = $credential.GetNetworkCredential().Password
+    
+    $rst = New-Object -TypeName System.IdentityModel.Protocols.WSTrust.RequestSecurityToken -ArgumentList ([System.IdentityModel.Protocols.WSTrust.RequestTypes]::Issue)
+    $rst.AppliesTo = New-Object -TypeName System.IdentityModel.Protocols.WSTrust.EndpointReference -ArgumentList $clientRealm
+    $rst.TokenType = 'urn:ietf:params:oauth:token-type:jwt'
+    $rst.KeyType = [System.IdentityModel.Protocols.WSTrust.KeyTypes]::Bearer
 
-        $identityProviderBinding = New-Object -TypeName System.ServiceModel.WS2007HttpBinding -ArgumentList ([System.ServiceModel.SecurityMode]::TransportWithMessageCredential)
-        $identityProviderBinding.Security.Message.EstablishSecurityContext = $false
-        $identityProviderBinding.Security.Message.ClientCredentialType = 'UserName'
-        $identityProviderBinding.Security.Transport.ClientCredentialType = 'None'
-
-        $trustChannelFactory = New-Object -TypeName System.ServiceModel.Security.WSTrustChannelFactory -ArgumentList $identityProviderBinding, $identityProviderEndpoint
-        $trustChannelFactory.TrustVersion = [System.ServiceModel.Security.TrustVersion]::WSTrust13
-
-        if ($allowSelfSignCertificates) {
-            $certificateAuthentication = New-Object -TypeName System.ServiceModel.Security.X509ServiceCertificateAuthentication
-            $certificateAuthentication.CertificateValidationMode = 'None'
-            $trustChannelFactory.Credentials.ServiceCertificate.SslCertificateAuthentication = $certificateAuthentication
-        }
-
-        $trustChannelFactory.Credentials.SupportInteractive = $false
-        $trustChannelFactory.Credentials.UserName.UserName = $Credential.UserName
-        $trustChannelFactory.Credentials.UserName.Password = $Credential.GetNetworkCredential().Password
-
-        $channel = $trustChannelFactory.CreateChannel()
-        $rst = New-Object -TypeName System.IdentityModel.Protocols.WSTrust.RequestSecurityToken -ArgumentList ([System.IdentityModel.Protocols.WSTrust.RequestTypes]::Issue)
-        $rst.AppliesTo = New-Object -TypeName System.IdentityModel.Protocols.WSTrust.EndpointReference -ArgumentList $clientRealm
-        $rst.TokenType = 'urn:ietf:params:oauth:token-type:jwt'
-        $rst.KeyType = [System.IdentityModel.Protocols.WSTrust.KeyTypes]::Bearer
-
-        $rstr = New-Object -TypeName System.IdentityModel.Protocols.WSTrust.RequestSecurityTokenResponse
-
-        $token = $channel.Issue($rst, [ref] $rstr);
-
-        $tokenString = ([System.IdentityModel.Tokens.GenericXmlSecurityToken]$token).TokenXml.InnerText;
-        $result = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($tokenString));
-        return $result
+    $rstr = New-Object -TypeName System.IdentityModel.Protocols.WSTrust.RequestSecurityTokenResponse
+ 
+    $channel = $trustChannelFactory.CreateChannel()
+    $token = $channel.Issue($rst, [ref] $rstr)
+ 
+    $tokenString = ([System.IdentityModel.Tokens.GenericXmlSecurityToken]$token).TokenXml.InnerText;
+    $token = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($tokenString))
+    Write-Output -InputObject $token
     }
     catch {
         throw $_
     }
 }
-
 function Get-WAPSubscription {
     <#
     .SYNOPSIS

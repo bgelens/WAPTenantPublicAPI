@@ -23,11 +23,7 @@ Grant Execute On Type::.mp.CoAdminTableType To mp_TenantAPI
 Grant Execute On Object::mp.GetInvalidatedUserTokens to mp_TenantAPI
 ```
 
-For now I have added to functions to acquire the bearer tokens from (I'm planning to add my own later on, these kickstarted my development of this module).
-Get-WAPAdfsToken is capable to get the token from your ADFS STS if you have enabled WAP for use with ADFS.
-The function is based on the work of Petri Mälkki. For more info: http://virtualstation.azurewebsites.net/?p=4331
-
-Get-WAPASPNetToken is capable to get the token from the tenant auth site which comes with and is preconfigured with WAP by default.
+Get-WAPToken is capable to get the token from both the tenant auth site which comes with and is preconfigured with WAP by default and ADFS.
 The function is based on the example WAP functions found in the Admin-API install directory.
 
 Examples
@@ -35,7 +31,7 @@ Examples
 ```powershell
 #example deployment 1
 $creds = Get-Credential
-$token = Get-WAPAdfsToken -Credential $creds -URL 'https://sts.bgelens.nl' -Verbose
+$token = Get-WAPToken -Credential $creds -URL 'https://sts.bgelens.nl' -ADFS
 $Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -Verbose -PublicTenantAPIUrl https://api.bgelens.nl -Port 443 -Name 'Test'
 #$Subscription | Get-WAPGalleryVMRole
 $GI = $Subscription | Get-WAPGalleryVMRole -Name DSCPullServerClient
@@ -49,7 +45,7 @@ $Subscription | New-WAPVMRoleDeployment -VMRole $GI -ParameterObject $VMProps -C
 
 #example deployment 2
 $creds = Get-Credential
-Get-WAPASPNetToken -Credential ben@bgelens.nl -URL https://wapauth.bgelens.nl -Verbose -Port 443
+Get-WAPToken -Credential ben@bgelens.nl -URL https://wapauth.bgelens.nl -Verbose -Port 443
 $GI = $Subscription | Get-WAPGalleryVMRole -Name DSCPullServerClient
 $OSDisk = $GI | Get-WAPVMRoleOSDisk | Sort-Object -Property AddedTime -Descending | Select-Object -First 1
 $NW = $Subscription | Get-WAPVMNetwork -Name internal

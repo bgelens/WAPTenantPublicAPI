@@ -103,11 +103,15 @@ function Get-WAPToken {
     }
 
     if ($ADFS) {
-        $identityProviderEndpoint = New-Object -TypeName System.ServiceModel.EndpointAddress -ArgumentList ($URL + ":$Port" + '/adfs/services/trust/13/usernamemixed')
+        Write-Verbose -Message 'Constructing ADFS URL'
+        $ConstructedURL = $URL + ":$Port" + '/adfs/services/trust/13/usernamemixed'
     }
     else {
-        $identityProviderEndpoint = New-Object -TypeName System.ServiceModel.EndpointAddress -ArgumentList ($URL + ":$Port" + '/wstrust/issue/usernamemixed')
+        Write-Verbose -Message 'Constructing ASPNet URL'
+        $ConstructedURL = $URL + ":$Port" + '/wstrust/issue/usernamemixed'
     }
+    Write-Verbose -Message $ConstructedURL
+    $identityProviderEndpoint = New-Object -TypeName System.ServiceModel.EndpointAddress -ArgumentList $ConstructedURL
     $identityProviderBinding = New-Object -TypeName System.ServiceModel.WS2007HttpBinding -ArgumentList ([System.ServiceModel.SecurityMode]::TransportWithMessageCredential)
     $identityProviderBinding.Security.Message.EstablishSecurityContext = $false
     $identityProviderBinding.Security.Message.ClientCredentialType = 'UserName'
@@ -117,6 +121,7 @@ function Get-WAPToken {
     $trustChannelFactory.TrustVersion = [System.ServiceModel.Security.TrustVersion]::WSTrust13
  
     if ($IgnoreSSL) {
+        Write-Warning -Message 'IgnoreSSL switch defined. Certificate errors will be ignored!'
         $certificateAuthentication = New-Object -TypeName System.ServiceModel.Security.X509ServiceCertificateAuthentication
         $certificateAuthentication.CertificateValidationMode = 'None'
         $trustChannelFactory.Credentials.ServiceCertificate.SslCertificateAuthentication = $certificateAuthentication
@@ -148,6 +153,7 @@ function Get-WAPToken {
         throw $_
     }
 }
+
 function Get-WAPSubscription {
     <#
     .SYNOPSIS
@@ -218,7 +224,7 @@ function Get-WAPSubscription {
         $Headers | Out-String | Write-Debug
         
         $URL = '{0}:{1}/subscriptions/' -f $PublicTenantAPIUrl,$Port        
-        Write-Verbose "Constructed Subscription URI: $URI"
+        Write-Verbose "Constructed Subscription URL: $URL"
 
         $Subscriptions = Invoke-RestMethod -Uri $URL -Headers $Headers -Method Get
         [void] $PSBoundParameters.Remove('Name')
@@ -795,13 +801,8 @@ function Get-WAPCloudService {
             Write-Verbose "Constructed CloudService URI: $URI"
 
             $CloudServices = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
-
             [void] $PSBoundParameters.Remove('Name')
             [void] $PSBoundParameters.Remove('List')
-            [void] $PSBoundParameters.Remove('Verbose')
-            [void] $PSBoundParameters.Remove('Debug')
-            [void] $PSBoundParameters.Remove('IgnoreSSL')
-
             foreach ($C in $CloudServices.value) {
                 if ($PSCmdlet.ParameterSetName -eq 'Name' -and $C.Name -ne $Name) {
                     continue
@@ -906,6 +907,10 @@ function New-WAPCloudService {
             } | ConvertTo-Json -Compress
 
             $CloudService = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Post -Body $CloudServiceConfig -ContentType 'application/json'
+            [void] $PSBoundParameters.Remove('Name')
+            $PSBoundParameters.GetEnumerator() | %{
+                    Add-Member -InputObject $CloudService -MemberType NoteProperty -Name $_.Key -Value $_.Value
+            }
             $CloudService.PSObject.Properties.Remove('odata.metadata')
             $CloudService.PSObject.TypeNames.Insert(0,'WAP.CloudService')
             Write-Output -InputObject $CloudService

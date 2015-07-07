@@ -74,6 +74,42 @@ function TestJWTClaimNotExpired {
 }
 
 function Get-WAPToken {
+    <#
+    .SYNOPSIS
+    Retrieves a Bearer token from either ADFS or the WAP ASP.Net STS.
+
+    .PARAMETER Url
+    The URL of either the ADFS or WAP STS.
+
+    .PARAMETER Port
+    The Port on which ADFS or WAP STS is listening. Default for ADFS is 443, for WAP STS 30071.
+
+    .PARAMETER ClientRealm
+    The realm name of either the TenantSite (default) or AdminSite.
+
+    .PARAMETER Credential
+    Credentials to acquire the bearer token.
+
+    .PARAMETER ADFS
+    When enabled the token will be requested from an ADFS STS. When disabled the WAP STS is assumed.
+
+    .PARAMETER IgnoreSSL
+    When using self-signed certificates, SSL validation will be ignored when this switch is enabled.
+
+    .EXAMPLE
+    PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+
+    This will return a bearer token from ADFS STS.
+
+    .EXAMPLE
+    PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.wap.com' -Port 443
+
+    This will return a bearer token from WAP STS using the non default port 443.
+    #>
     [cmdletbinding()]
     param (
         [Parameter(Mandatory)]
@@ -85,7 +121,7 @@ function Get-WAPToken {
         [String] $ClientRealm = 'http://azureservices/TenantSite',
 
         [Parameter(Mandatory)]
-        [PSCredential]$credential,
+        [PSCredential] $Credential,
 
         [Switch] $ADFS,
 
@@ -159,21 +195,46 @@ function Get-WAPSubscription {
     .SYNOPSIS
     Retrieves Tenant User Subscription from Azure Pack TenantPublic or Tenant API.
 
-    .DESCRIPTION
-    Retrieves Tenant User Subscription from Azure Pack TenantPublic or Tenant API
-
     .PARAMETER Token
-    Bearer token acquired via Get-WAPADFSToken or Get-WAPASPNetToken.
+    Bearer Token acquired via Get-WAPToken.
 
     .PARAMETER UserId
     The UserId used to get the Bearer token.
 
+    .PARAMETER PublicTenantAPIUrl
+    The URL of either the TenantPublic API or Tenant API.
+
+    .PARAMETER Port
+    The Port where the TenantPublic (30006) or Tenant API (30005) is listening on.
+    Defaults to 30006.
+
+    .PARAMETER Name
+    The Name of the subscription to be acquired.
+
+    .PARAMETER Id
+    The Id of the subscription to be acquired.
+
+    .PARAMETER List
+    A list of all subscriptions the user has access to.
+
+    .PARAMETER IgnoreSSL
+    When using self-signed certificates, SSL validation will be ignored when this switch is enabled.
+
     .EXAMPLE
-    Retrieve Tenant User Subscription from Azure Pack
-    $URL = 'https://publictenantapi.mydomain.com'
-    $creds = Get-Credential
-    $token = Get-WAPAdfsToken -Credential $creds -URL 'https://sts.adfs.com'
-    $Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
+    PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+    PS C:\>Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
+
+    This will return the subscription with name 'MySubscription' if it exists.
+
+    .EXAMPLE
+    PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.wap.com'
+    PS C:\>Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL
+
+    This will return a list of the users subscriptions using the default public tenant api port 30006.
     #>
     [CmdletBinding(DefaultParameterSetName='List')]
     param (
@@ -229,10 +290,7 @@ function Get-WAPSubscription {
         $Subscriptions = Invoke-RestMethod -Uri $URL -Headers $Headers -Method Get
         [void] $PSBoundParameters.Remove('Name')
         [void] $PSBoundParameters.Remove('Id')
-        [void] $PSBoundParameters.Remove('Verbose')
-        [void] $PSBoundParameters.Remove('Debug')
         [void] $PSBoundParameters.Remove('List')
-        [void] $PSBoundParameters.Remove('IgnoreSSL')
 
         foreach ($S in $Subscriptions) {
             if ($PSCmdlet.ParameterSetName -eq 'Name' -and $S.SubscriptionName -ne $Name) {
@@ -266,22 +324,56 @@ function Get-WAPGalleryVMRole {
     .SYNOPSIS
     Retrieves VM Role Gallery Items asigned to Tenant user Subscription from Azure Pack TenantPublic or Tenant API.
 
-    .DESCRIPTION
-    Retrieves VM Role Gallery Items asigned to Tenant user Subscription from Azure Pack TenantPublic or Tenant API.
-
     .PARAMETER Token
-    Bearer token acquired via Get-WAPADFSToken or Get-WAPASPNetToken.
+    Bearer Token acquired via Get-WAPToken.
 
     .PARAMETER UserId
     The UserId used to get the Bearer token.
 
+    .PARAMETER PublicTenantAPIUrl
+    The URL of either the TenantPublic API or Tenant API.
+
+    .PARAMETER Port
+    The Port where the TenantPublic (30006) or Tenant API (30005) is listening on.
+    Defaults to 30006.
+
+    .PARAMETER Subscription
+    The subscription id to get the VM Role Gallery Item from.
+
+    .PARAMETER List
+    Defaults to list mode. Shows all VM Role Gallery Items.
+
+    .PARAMETER Name
+    When Name is specified, only the VM Role Gallery Item with the specified name is returned.
+
+    .PARAMETER IgnoreSSL
+    When using self-signed certificates, SSL validation will be ignored when this switch is enabled.
+
     .EXAMPLE
-    Retrieve Tenant User Subscription from Azure Pack
-    $URL = 'https://publictenantapi.mydomain.com'
-    $creds = Get-Credential
-    $token = Get-WAPAdfsToken -Credential $creds -URL 'https://sts.adfs.com'
-    $Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
-    $Subscription | Get-WAPGalleryVMRole
+    PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+    PS C:\>$Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
+    PS C:\>$Subscription | Get-WAPGalleryVMRole
+
+    This will retrieve all VM Role Gallery Items tight to the subscription.
+
+    .EXAMPLE
+    PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+    PS C:\>$Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
+    PS C:\>$Subscription | Get-WAPGalleryVMRole -Name 'MyAwesomeVMRole'
+
+    This will retreive only the VM Role Gallery Item with the same name as specified.
+
+    .EXAMPLE
+    PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+    PS C:\>Get-WAPGalleryVMRole -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -SubscriptionId 'b5a9b263-066b-4a8f-87b4-1b7c90a5bcad'
+
+    This will not make use of a subscription object but is entirely specified. All VM Role Gallery Items assigned to this subscription will be returned.
     #>
     [CmdletBinding(DefaultParameterSetName='List')]
     param (
@@ -340,8 +432,6 @@ function Get-WAPGalleryVMRole {
 
             $GalleryItems = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
             [void] $PSBoundParameters.Remove('Name')
-            [void] $PSBoundParameters.Remove('Verbose')
-            [void] $PSBoundParameters.Remove('Debug')
             [void] $PSBoundParameters.Remove('List')
             [void] $PSBoundParameters.Remove('IgnoreSSL')
 
@@ -386,22 +476,37 @@ function Get-WAPVMRoleOSDisk {
     .SYNOPSIS
     Retrieves Available VMRole OS Disks based on Gallery Item from Azure Pack TenantPublic or Tenant API.
 
-    .DESCRIPTION
-    Retrieves Available VMRole OS Disks based on Gallery Item from Azure Pack TenantPublic or Tenant API.
-
     .PARAMETER Token
-    Bearer token acquired via Get-WAPADFSToken or Get-WAPASPNetToken.
+    Bearer Token acquired via Get-WAPToken.
 
     .PARAMETER UserId
     The UserId used to get the Bearer token.
 
+    .PARAMETER PublicTenantAPIUrl
+    The URL of either the TenantPublic API or Tenant API.
+
+    .PARAMETER Port
+    The Port where the TenantPublic (30006) or Tenant API (30005) is listening on.
+    Defaults to 30006.
+
+    .PARAMETER Subscription
+    The subscription id to get the OS Disks from.
+
+    .PARAMETER IgnoreSSL
+    When using self-signed certificates, SSL validation will be ignored when this switch is enabled.
+
+    .PARAMETER ViewDef
+    The viewdef comes as a property of the VM Role gallery item.
+
     .EXAMPLE
-    $URL = 'https://publictenantapi.mydomain.com'
-    $creds = Get-Credential
-    $token = Get-WAPAdfsToken -Credential $creds -URL 'https://sts.adfs.com'
-    $Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
-    $GI = $Subscription | Get-WAPGalleryVMRole -Name MyVMRole
-    $GI | Get-WAPVMRoleOSDisk -Verbose
+    PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+    PS C:\>$Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
+    PS C:\>$GI = $Subscription | Get-WAPGalleryVMRole -Name MyVMRole
+    PS C:\>$GI | Get-WAPVMRoleOSDisk -Verbose
+
+    This will fetch all compatible and enabled OS disks.
     #>
     [CmdletBinding()]
     param (
@@ -491,21 +596,39 @@ function Get-WAPVMNetwork {
     .SYNOPSIS
     Retrieves subscription available VM Networks from Azure Pack TenantPublic or Tenant API.
 
-    .DESCRIPTION
-    Retrieves subscription available VM Networks from Azure Pack TenantPublic or Tenant API.
-
     .PARAMETER Token
-    Bearer token acquired via Get-WAPADFSToken or Get-WAPASPNetToken.
+    Bearer Token acquired via Get-WAPToken.
 
     .PARAMETER UserId
     The UserId used to get the Bearer token.
 
+    .PARAMETER PublicTenantAPIUrl
+    The URL of either the TenantPublic API or Tenant API.
+
+    .PARAMETER Port
+    The Port where the TenantPublic (30006) or Tenant API (30005) is listening on.
+    Defaults to 30006.
+
+    .PARAMETER Subscription
+    The subscription id to get the VM Networks from.
+
+    .PARAMETER List
+    Defaults to list mode. Shows all VM Networks available to the subscription.
+
+    .PARAMETER Name
+    When Name is specified, only the VM Network with the specified name is returned.
+
+    .PARAMETER IgnoreSSL
+    When using self-signed certificates, SSL validation will be ignored when this switch is enabled.
+
     .EXAMPLE
-    $URL = 'https://publictenantapi.mydomain.com'
-    $creds = Get-Credential
-    $token = Get-WAPAdfsToken -Credential $creds -URL 'https://sts.adfs.com'
-    $Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
-    $Subscription | Get-WAPVMNetwork
+    PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+    PS C:\>$Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
+    PS C:\>$Subscription | Get-WAPVMNetwork
+
+    This will fetch all VM Networks available to the subscription.
     #>
     [CmdletBinding(DefaultParameterSetName='List')]
     param (
@@ -589,9 +712,6 @@ function New-WAPVMRoleParameterObject {
     .SYNOPSIS
     Generates VM Role Parameter Object.
 
-    .DESCRIPTION
-    Generates VM Role Parameter Object.
-
     .PARAMETER VMRole
     VM Role gallery item object acquired via Get-WAPGalleryVMRole
 
@@ -609,22 +729,27 @@ function New-WAPVMRoleParameterObject {
     In non-interactive mode this functions uses the defaults where provided and uses NULL for everything unknown.
 
     .EXAMPLE
-    $creds = Get-Credential
-    $token = Get-WAPAdfsToken -Credential $creds -URL 'https://sts.domain.tld'
-    $Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl https://api.domain.tld -Port 443 -Name 'MySub'
-    $GI = $Subscription | Get-WAPGalleryVMRole -Name MyVMRole
-    $OSDisk = $GI | Get-WAPVMRoleOSDisk | Sort-Object -Property AddedTime -Descending | Select-Object -First 1
-    $NW = $Subscription | Get-WAPVMNetwork -Name MyNetwork
-    $VMProps = New-WAPVMRoleParameterObject -VMRole $GI -OSDisk $OSDisk -VMRoleVMSize Large -VMNetwork $NW -Interactive
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.domain.tld' -ADFS
+    PS C:\>$Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl https://api.domain.tld -Port 443 -Name 'MySub'
+    PS C:\>$GI = $Subscription | Get-WAPGalleryVMRole -Name MyVMRole
+    PS C:\>$OSDisk = $GI | Get-WAPVMRoleOSDisk | Sort-Object -Property AddedTime -Descending | Select-Object -First 1
+    PS C:\>$NW = $Subscription | Get-WAPVMNetwork -Name MyNetwork
+    PS C:\>$VMProps = New-WAPVMRoleParameterObject -VMRole $GI -OSDisk $OSDisk -VMRoleVMSize Large -VMNetwork $NW -Interactive
+
+    This will run in interactive mode. It will prompt to fill in the blanks and accept defaults or provide own values.
 
     .EXAMPLE
-    $creds = Get-Credential
-    $token = Get-WAPAdfsToken -Credential $creds -URL 'https://sts.domain.tld'
-    $Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl https://api.domain.tld -Port 443 -Name 'MySub'
-    $GI = $Subscription | Get-WAPGalleryVMRole -Name MyVMRole
-    $OSDisk = $GI | Get-WAPVMRoleOSDisk | Sort-Object -Property AddedTime -Descending | Select-Object -First 1
-    $NW = $Subscription | Get-WAPVMNetwork -Name MyNetwork
-    $VMProps = New-WAPVMRoleParameterObject -VMRole $GI -OSDisk $OSDisk -VMRoleVMSize Large -VMNetwork $NW
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.domain.tld' -ADFS
+    PS C:\>$Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl https://api.domain.tld -Port 443 -Name 'MySub'
+    PS C:\>$GI = $Subscription | Get-WAPGalleryVMRole -Name MyVMRole
+    PS C:\>$OSDisk = $GI | Get-WAPVMRoleOSDisk | Sort-Object -Property AddedTime -Descending | Select-Object -First 1
+    PS C:\>$NW = $Subscription | Get-WAPVMNetwork -Name MyNetwork
+    PS C:\>$VMProps = New-WAPVMRoleParameterObject -VMRole $GI -OSDisk $OSDisk -VMRoleVMSize Large -VMNetwork $NW
+    PS C:\>$VMProps.MissingValue = 'MyValue'
+
+    This will run in non-interactive mode. It will use defaults and assigns NULL if no default is available. Values can be assigned / overwritten.
     #>
     [CmdletBinding()]
     param (
@@ -727,21 +852,39 @@ function Get-WAPCloudService {
     .SYNOPSIS
     Retrieves Cloudservice deployed to subscription from Azure Pack TenantPublic or Tenant API.
 
-    .DESCRIPTION
-    Retrieves Cloudservice deployed to subscription from Azure Pack TenantPublic or Tenant API.
-
     .PARAMETER Token
-    Bearer token acquired via Get-WAPADFSToken or Get-WAPASPNetToken.
+    Bearer Token acquired via Get-WAPToken.
 
     .PARAMETER UserId
     The UserId used to get the Bearer token.
 
+    .PARAMETER PublicTenantAPIUrl
+    The URL of either the TenantPublic API or Tenant API.
+
+    .PARAMETER Port
+    The Port where the TenantPublic (30006) or Tenant API (30005) is listening on.
+    Defaults to 30006.
+
+    .PARAMETER Subscription
+    The subscription id to get the cloud service from.
+
+    .PARAMETER List
+    Defaults to list mode. Shows all cloud services provisioned for the subscription.
+
+    .PARAMETER Name
+    When Name is specified, only the cloud service with the specified name is returned.
+
+    .PARAMETER IgnoreSSL
+    When using self-signed certificates, SSL validation will be ignored when this switch is enabled.
+
     .EXAMPLE
-    $URL = 'https://publictenantapi.mydomain.com'
-    $creds = Get-Credential
-    $token = Get-WAPAdfsToken -Credential $creds -URL 'https://sts.adfs.com'
-    $Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
-    $Subscription | Get-WAPCloudService
+    PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPAdfsToken -Credential $creds -URL 'https://sts.adfs.com'
+    PS C:\>$Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
+    PS C:\>$Subscription | Get-WAPCloudService
+
+    This will retreive all provisioned cloud services for the specified subscription.
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
     param (
@@ -832,21 +975,36 @@ function New-WAPCloudService {
     .SYNOPSIS
     Creates Cloudservice for subscription from Azure Pack TenantPublic or Tenant API.
 
-    .DESCRIPTION
-    Creates Cloudservice for subscription from Azure Pack TenantPublic or Tenant API.
-
     .PARAMETER Token
-    Bearer token acquired via Get-WAPADFSToken or Get-WAPASPNetToken.
+    Bearer Token acquired via Get-WAPToken.
 
     .PARAMETER UserId
     The UserId used to get the Bearer token.
 
+    .PARAMETER PublicTenantAPIUrl
+    The URL of either the TenantPublic API or Tenant API.
+
+    .PARAMETER Port
+    The Port where the TenantPublic (30006) or Tenant API (30005) is listening on.
+    Defaults to 30006.
+
+    .PARAMETER Subscription
+    The subscription id to provision the cloud service to.
+
+    .PARAMETER Name
+    The name of the cloud service to be provisioned. The name must be unique within the subscription.
+
+    .PARAMETER IgnoreSSL
+    When using self-signed certificates, SSL validation will be ignored when this switch is enabled.
+
     .EXAMPLE
-    $URL = 'https://publictenantapi.mydomain.com'
-    $creds = Get-Credential
-    $token = Get-WAPAdfsToken -Credential $creds -URL 'https://sts.adfs.com'
-    $Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
-    $Subscription | New-WAPCloudService -Name test
+    PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+    PS C:\>$Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
+    PS C:\>$Subscription | New-WAPCloudService -Name test
+
+    This will provision a cloud service named test.
     #>
     [CmdletBinding()]
     param (
@@ -932,28 +1090,50 @@ function Remove-WAPCloudService {
     .SYNOPSIS
     Deletes Cloudservice from subscription from Azure Pack TenantPublic or Tenant API.
 
-    .DESCRIPTION
-    Deletes Cloudservice from subscription from Azure Pack TenantPublic or Tenant API.
-
     .PARAMETER Token
-    Bearer token acquired via Get-WAPADFSToken or Get-WAPASPNetToken.
+    Bearer Token acquired via Get-WAPToken.
 
     .PARAMETER UserId
     The UserId used to get the Bearer token.
 
-    .EXAMPLE
-    $URL = 'https://publictenantapi.mydomain.com'
-    $creds = Get-Credential
-    $token = Get-WAPAdfsToken -Credential $creds -URL 'https://sts.adfs.com'
-    $Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
-    $Subscription | Remove-WAPCloudService -Name test
+    .PARAMETER PublicTenantAPIUrl
+    The URL of either the TenantPublic API or Tenant API.
+
+    .PARAMETER Port
+    The Port where the TenantPublic (30006) or Tenant API (30005) is listening on.
+    Defaults to 30006.
+
+    .PARAMETER Subscription
+    The subscription id to get remove the cloud service from.
+
+    .PARAMETER Name
+    The name of the cloud service to be removed.
+
+    .PARAMETER Force
+    If Force is not specified, removal is treated with confirm impact high.
+
+    .PARAMETER IgnoreSSL
+    When using self-signed certificates, SSL validation will be ignored when this switch is enabled.
 
     .EXAMPLE
-    $URL = 'https://publictenantapi.mydomain.com'
-    $creds = Get-Credential
-    $token = Get-WAPAdfsToken -Credential $creds -URL 'https://sts.adfs.com'
-    $Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
-    $Subscription | Get-WAPCloudService -Name Test | Remove-WAPCloudService -Force
+    PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+    PS C:\>$Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
+    PS C:\>$Subscription | Remove-WAPCloudService -Name test
+
+    This will remove the cloudservice named test from the subscription. If a VM Role has been deployed to this cloud service, it will be removed as well.
+    In this case, the user will be prompted to confirm the remove action as -Force or -Confirm:$false is not specified.
+
+    .EXAMPLE
+    PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+    PS C:\>$Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
+    PS C:\>$Subscription | Get-WAPCloudService -Name Test | Remove-WAPCloudService -Force
+
+    This will remove the cloudservice named test from the subscription. If a VM Role has been deployed to this cloud service, it will be removed as well.
+    In this case, the user is not prompted to confirm as -Force is specified.
     #>
     [CmdletBinding(SupportsShouldProcess,
                    ConfirmImpact='High')]
@@ -1039,21 +1219,50 @@ function New-WAPVMRoleDeployment {
     .SYNOPSIS
     Deploys VM Role to a Cloudservice using Azure Pack TenantPublic or Tenant API.
 
-    .DESCRIPTION
-    Deploys VM Role to a Cloudservice using Azure Pack TenantPublic or Tenant API.
-
     .PARAMETER Token
-    Bearer token acquired via Get-WAPADFSToken or Get-WAPASPNetToken.
+    Bearer Token acquired via Get-WAPToken.
 
     .PARAMETER UserId
     The UserId used to get the Bearer token.
 
+    .PARAMETER PublicTenantAPIUrl
+    The URL of either the TenantPublic API or Tenant API.
+
+    .PARAMETER Port
+    The Port where the TenantPublic (30006) or Tenant API (30005) is listening on.
+    Defaults to 30006.
+
+    .PARAMETER Subscription
+    The subscription id to get the VM Role Gallery Item from.
+
+    .PARAMETER CloudServiceName
+    The name of the cloud service to provision to. If it does not exist, it will be created.
+
+    .PARAMETER VMRole
+    Object acquired with Get-WAPGalleryVMRole.
+
+    .PARAMETER ParameterObject
+    Object acquired with New-WAPVMRoleParameterObject.
+
+    .PARAMETER IgnoreSSL
+    When using self-signed certificates, SSL validation will be ignored when this switch is enabled.
+
     .EXAMPLE
-    $URL = 'https://publictenantapi.mydomain.com'
-    $creds = Get-Credential
-    $token = Get-WAPAdfsToken -Credential $creds -URL 'https://sts.adfs.com'
-    $Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
-    $Subscription | Remove-WAPCloudService -Name test
+    PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+    PS C:\>$Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
+    PS C:\>$GI = $Subscription | Get-WAPGalleryVMRole -Name DomainController
+    PS C:\>$OSDisk = $GI | Get-WAPVMRoleOSDisk | Sort-Object -Property AddedTime -Descending | Select-Object -First 1
+    PS C:\>$NW = $Subscription | Get-WAPVMNetwork -Name Private
+    PS C:\>$VMProps = New-WAPVMRoleParameterObject -VMRole $GI -OSDisk $OSDisk -VMRoleVMSize Large -VMNetwork $NW
+    PS C:\>$VMProps.DomainName = 'MyNewDomain.local'
+    PS C:\>$Subscription | New-WAPVMRoleDeployment -VMRole $GI -ParameterObject $VMProps -CloudServiceName DCs -Verbose
+    
+    This will deploy a new VM Role based on the Gallery Item DomainController. It will link the VMs up to the Private network and uses the latest published OS Disk.
+    The domain name for the VM Role will be 'MyNewDomain.local' and the VMs will be sided using the Large VM Profile.
+    If the cloud service DCs does not yet exists, it will be created. If it does exist, it will be checked if it has the correct name and if no VM Roles have been deployed to it.
+    This function mirrors portal functionality and therefore does not allow multiple VM Roles in one cloud service.
     #>
     [CmdletBinding()]
     param (
@@ -1195,25 +1404,36 @@ function Get-WAPVMRole {
     .SYNOPSIS
     Retrieves Deployed VM Role information from Azure Pack TenantPublic or Tenant API.
 
-    .DESCRIPTION
-    Retrieves Deployed VM Role information from Azure Pack TenantPublic or Tenant API.
-
-    .PARAMETER CloudServiceName 
-    The name of the cloud service where the VM Role is deployed to.
-
     .PARAMETER Token
-    Bearer token acquired via Get-WAPADFSToken or Get-WAPASPNetToken.
+    Bearer Token acquired via Get-WAPToken.
 
     .PARAMETER UserId
     The UserId used to get the Bearer token.
 
+    .PARAMETER PublicTenantAPIUrl
+    The URL of either the TenantPublic API or Tenant API.
+
+    .PARAMETER Port
+    The Port where the TenantPublic (30006) or Tenant API (30005) is listening on.
+    Defaults to 30006.
+
+    .PARAMETER Subscription
+    The subscription id to get the VM Role information from.
+
+    .PARAMETER CloudServiceName
+    The name of the cloud service to get VM Role information from.
+
+    .PARAMETER IgnoreSSL
+    When using self-signed certificates, SSL validation will be ignored when this switch is enabled.
+
     .EXAMPLE
-    Retrieve VM Role information from cloudservice 'Test' using custom api port 443
-    $URL = 'https://publictenantapi.mydomain.com'
-    $creds = Get-Credential
-    $token = Get-WAPAdfsToken -Credential $creds -URL 'https://sts.adfs.com'
-    $Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
-    Get-WAPVMRole -Token $token -UserId $creds.UserName -CloudServiceName 'Test' -PublicTenantAPIUrl $URL -Subscription $Subscription.SubscriptionID -Port 443
+    PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+    PS C:\>$creds = Get-Credential
+    PS C:\>$token = Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+    PS C:\>$Subscription = Get-WAPSubscription -Token $token -UserId $creds.UserName -PublicTenantAPIUrl $URL -Port 443 -Name 'MySubscription'
+    PS C:\>$Subscription | Get-WAPCloudService -Name DCs | Get-WAPVMRole | select *
+
+    This will get the VM Role provisioning information for the DCs cloud service deployment.
     #>
     [CmdletBinding()]
     param (

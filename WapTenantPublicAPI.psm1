@@ -293,7 +293,7 @@ function Connect-WAPAPI {
         $TestURL = '{0}:{1}/subscriptions/' -f $URL,$Port
         Write-Verbose -Message "Constructed Connection URL: $TestURL"
 
-        $Result = Invoke-WebRequest -Uri $TestURL -Headers $Headers -ErrorVariable 'ErrCon'
+        $Result = Invoke-WebRequest -Uri $TestURL -Headers $Headers -UseBasicParsing -ErrorVariable 'ErrCon'
         if ($Result) {
             Write-Verbose -Message 'Successfully connected'
             Set-Variable -Name PublicTenantAPIUrl -Value $URL -Scope 1

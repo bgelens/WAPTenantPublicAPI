@@ -481,7 +481,11 @@ function Get-WAPGalleryVMRole {
         [Parameter(Mandatory,
                    ParameterSetName='Name')]
         [ValidateNotNullOrEmpty()]
-        [String] $Name
+        [String] $Name,
+
+        [Parameter(ParameterSetName='Name')]
+        [ValidateNotNullOrEmpty()]
+        [String] $Version
     )
     process {
         try {
@@ -500,6 +504,9 @@ function Get-WAPGalleryVMRole {
 
             foreach ($G in $GalleryItems.value) {
                 if ($PSCmdlet.ParameterSetName -eq 'Name' -and $G.Name -ne $Name) {
+                    continue
+                }
+                if ($Version -and $G.Version -ne $Version) {
                     continue
                 }
                 $GIResDEFUri = '{0}:{1}/{2}/{3}/?api-version=2013-03' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$G.ResourceDefinitionUrl

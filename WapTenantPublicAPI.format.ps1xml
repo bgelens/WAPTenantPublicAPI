@@ -152,6 +152,30 @@
                     </ListEntry>
                 </ListEntries>
             </ListControl>
-        </View>        
+        </View>
+        
+        <View>
+            <Name>WAP.VM</Name>
+            <ViewSelectedBy>
+                <TypeName>WAP.VM</TypeName>
+            </ViewSelectedBy>
+             <ListControl>
+                <ListEntries>
+                    <ListEntry>
+                        <ListItems>
+                            <ListItem>
+                                <PropertyName>ComputerName</PropertyName>
+                            </ListItem>
+                            <ListItem>
+                                <PropertyName>RuntimeState</PropertyName>
+                            </ListItem>
+                            <ListItem>
+                                <PropertyName>IPAddress</PropertyName>
+                            </ListItem>
+                        </ListItems>
+                    </ListEntry>
+                </ListEntries>
+            </ListControl>
+        </View>
     </ViewDefinitions>
 </Configuration>

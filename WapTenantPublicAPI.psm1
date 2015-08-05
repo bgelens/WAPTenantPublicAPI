@@ -1212,5 +1212,135 @@ function Get-WAPVMRole {
     }
 }
 
+function Get-WAPVM {
+    <#
+    .SYNOPSIS
+        Retrieves Deployed VM(s) information for the named CloudService from Azure Pack TenantPublic or Tenant API.
+
+    .PARAMETER CloudServiceName
+    The name of the cloud service to get VM information from.
+
+    .PARAMETER VMMEnhanced
+    A switch to enhance VM Role VM data with selected data from VMM (OwnerUserName, CreationTime, DeploymentErrorInfo and VMStatus in VMM).
+    This switch requires two additional URI requests, so this CmdLet might be slower when used in larger environments and hence is optional.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>Get-WAPCloudService -Name DCs | Get-WAPVM -VMMEnhanced | select *
+
+        This will get the VM information and enhanced VMM information for the DCs cloud service deployment.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory,
+                   ValueFromPipelineByPropertyName)]
+        [Alias('Name','VMRoleName')]
+        [ValidateNotNullOrEmpty()]
+        [String] $CloudServiceName,
+
+        [switch] $VMMEnhanced
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+
+            # Note we copy the WAPack Tenant Portal behaviour where the $CloudServiceName and $VMRoleName are identical and there is only 1 VMRole per CloudService
+            $URI = '{0}:{1}/{2}/CloudServices/{3}/Resources/MicrosoftCompute/VMRoles/{3}/VMs?api-version=2013-03' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$CloudServiceName
+            Write-Verbose -Message "Constructed VMRole URI: $URI"
+
+            $VMs = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
+
+            if ($VMMEnhanced) {
+                $StampId=(Get-WAPVMMCloud).StampId
+                Write-Verbose -Message "StampId: $StampId"
+            }                      
+                        
+            foreach ($V in $VMs.value) {
+                Add-Member -InputObject $V -MemberType NoteProperty -Name IPAddress -Value $V.ConnectToAddresses.IPAddress
+                Add-Member -InputObject $V -MemberType NoteProperty -Name NetworkName -Value $V.ConnectToAddresses.NetworkName
+                Add-Member -InputObject $V -MemberType NoteProperty -Name ParentCloudServiceName -Value $CloudServiceName
+                if ($VMMEnhanced) {
+                    $VMMURI = '{0}:{1}/{2}/services/systemcenter/vmm/VirtualMachines(ID=guid''{{{3}}}'',StampId=guid''{{{4}}}'')' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$V.Id,$StampId
+                    Write-Verbose -Message "Constructed VMM URI: $VMMURI"
+                    
+                    $VMMVM = Invoke-RestMethod -Uri $VMMURI -Headers $Headers -Method Get                    
+
+                    Add-Member -InputObject $V -MemberType NoteProperty -Name VMMOwnerUserName -Value $VMMVM.Owner.UserName
+                    Add-Member -InputObject $V -MemberType NoteProperty -Name VMMCreationTime -Value $VMMVM.CreationTime
+                    Add-Member -InputObject $V -MemberType NoteProperty -Name VMMDeploymentErrorInfo -Value $VMMVM.DeploymentErrorInfo
+                    Add-Member -InputObject $V -MemberType NoteProperty -Name VMMStatus -Value $VMMVM.Status
+                }
+                $V.PSObject.TypeNames.Insert(0,'WAP.VM')
+                Write-Output -InputObject $V
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Get-WAPVMMCloud {
+    <#
+    .SYNOPSIS
+        Retrieves VMM Cloud information for the selected Subscription from Azure Pack TenantPublic or Tenant API.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>Get-WAPVMMCloud
+
+        This will get the VMM Cloud information (CloudId, CloudName and StampId) for the selected subscription
+    #>
+
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+            
+            $VMMURIClouds = '{0}:{1}/{2}/services/systemcenter/vmm/Clouds' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
+            Write-Verbose -Message "Constructed VMMCloud URI: $VMMURIClouds"
+            
+            $VMMClouds = Invoke-RestMethod -Uri $VMMURIClouds -Headers $Headers -Method Get
+            
+            # Note that technically only 1 cloud can be returned per subscription in Windows Azure Pack, foreach > just to be sure
+            foreach ($C in $VMMClouds.value) {                
+                $C.PSObject.TypeNames.Insert(0,'VMM.Clouds')
+                Write-Output -InputObject $C
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
 Export-ModuleMember -Function *-WAP*
 Export-ModuleMember -Variable Token,Headers,PublicTenantAPIUrl,Port,IgnoreSSL,Subscription

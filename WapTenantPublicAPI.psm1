@@ -153,7 +153,7 @@ function Get-WAPToken {
     param (
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [string] $URL, 
+        [string] $Url, 
 
         [int] $Port,
 
@@ -274,7 +274,7 @@ function Connect-WAPAPI {
     param (
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [String] $URL,
+        [String] $Url,
 
         [Int] $Port = 30006,
 
@@ -592,6 +592,8 @@ function Get-WAPVMRoleOSDisk {
                     $I.ReleaseTime = [datetime] $I.ReleaseTime
                     $I.PSObject.TypeNames.Insert(0,'WAP.GI.OSDisk')
                     Write-Output -InputObject $I
+                } else {
+                    continue
                 }
             }
         } catch {
@@ -769,53 +771,39 @@ function New-WAPVMRoleParameterObject {
                 if ($P.DefaultValue) {
                     if(($result = Read-Host -Prompt "Press enter to accept default value $($P.DefaultValue) for $($P.Name). Valid entries: $values") -eq ''){
                         Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $P.DefaultValue -Force
-                    }
-                    else {
+                    } else {
                         do {
                             $result = Read-Host -Prompt "Enter one of the following entries: $values"
-                        }
-                        while (@($values.Split(',')) -notcontains $result)
+                        } while (@($values.Split(',')) -notcontains $result)
                         Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $result -Force
                     }
-                }
-                else {
+                } else {
                     do {
                         $result = Read-Host -Prompt "Enter one of the following entries: $values"
-                    }
-                    while (@($values.Split(',')) -notcontains $result)
+                    } while (@($values.Split(',')) -notcontains $result)
                     Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $result -Force
                 }
-            }
-            elseif ($Interactive -and $P.type -eq 'Credential') {
+            } elseif ($Interactive -and $P.type -eq 'Credential') {
                 do {
                     $result = Read-Host -Prompt "Enter a credential for $($P.Name) in the format domain\username:password or username:password"
-                }
-                while ($result -notmatch '\w+\\+\w+:+\w+' -and $result -notmatch '\w+:+\w+')
+                } while ($result -notmatch '\w+\\+\w+:+\w+' -and $result -notmatch '\w+:+\w+')
                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $result -Force
-            }
-            elseif ($P.DefaultValue) {
-                Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $P.DefaultValue -Force
-            }
-            elseif ($P.Type -eq 'OSVirtualHardDisk') {
+            } elseif ($P.Type -eq 'OSVirtualHardDisk') {
                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value "$($OSDisk.FamilyName):$($OSDisk.Release)" -Force
-            }
-            elseif ($P.Type -eq 'VMSize') {
+            } elseif ($P.Type -eq 'VMSize') {
                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $VMRoleVMSize -Force
-            }
-            elseif ($P.Type -eq 'Credential') {
+            } elseif ($P.Type -eq 'Credential') {
                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value 'domain\username:password' -Force
-            }
-            elseif ($P.Type -eq 'Network') {
+            } elseif ($P.Type -eq 'Network') {
                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $($VMNetwork.Name) -Force
-            }
-            elseif ($Interactive) {
+            } elseif ($P.DefaultValue) {
+                Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $P.DefaultValue -Force
+            } elseif ($Interactive) {
                 $result = Read-Host -Prompt "Enter a value for $($P.Name) of type $($P.Type)"
                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $result -Force
-            }
-            else {
+            } else {
                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $null -Force
             }
-        
         }
         $Output.PSObject.TypeNames.Insert(0,'WAP.ParameterObject')
         Write-Output -InputObject $Output

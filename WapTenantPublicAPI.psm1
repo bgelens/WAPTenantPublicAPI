@@ -883,7 +883,7 @@ function New-WAPCloudService {
         Creates Cloudservice for subscription from Azure Pack TenantPublic or Tenant API.
 
     .PARAMETER Name
-    The name of the cloud service to be provisioned. The name must be unique within the subscription.
+        The name of the cloud service to be provisioned. The name must be unique within the subscription.
 
     .EXAMPLE
         PS C:\>$URL = 'https://publictenantapi.mydomain.com'
@@ -1158,7 +1158,7 @@ function Get-WAPVMRole {
         Retrieves Deployed VM Role information from Azure Pack TenantPublic or Tenant API.
 
     .PARAMETER CloudServiceName
-    The name of the cloud service to get VM Role information from.
+        The name of the cloud service to get VM Role information from.
 
     .EXAMPLE
         PS C:\>$URL = 'https://publictenantapi.mydomain.com'
@@ -1208,6 +1208,220 @@ function Get-WAPVMRole {
             if ($IgnoreSSL) {
                 [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
             }
+        }
+    }
+}
+
+function Get-WAPVMRoleVM {
+    <#
+    .SYNOPSIS
+        Retrieves Deployed VM(s) information for the named CloudService from Azure Pack TenantPublic or Tenant API.
+
+    .PARAMETER CloudServiceName
+        The name of the cloud service to get VM information from.
+
+    .PARAMETER List
+        Defaults to list mode. Shows all VMs provisioned under the VM Role.
+
+    .PARAMETER ComputerName
+        When ComputerName is specified, only the VM with the specified ComputerName is returned.
+
+    .PARAMETER VMMEnhanced
+        A switch to enhance VM Role VM data with selected data from VMM (OwnerUserName, CreationTime, DeploymentErrorInfo and VMStatus in VMM).
+        This switch requires two additional URI requests, so this CmdLet might be slower when used in larger environments and hence is optional.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>Get-WAPCloudService -Name DCs | Get-WAPVMroleVM -VMMEnhanced | select *
+
+        This will get the VM information and enhanced VMM information for the DCs cloud service deployment.
+    #>
+    [CmdletBinding(DefaultParameterSetName='List')]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory,
+                   ValueFromPipelineByPropertyName)]
+        [Alias('Name','VMRoleName')]
+        [ValidateNotNullOrEmpty()]
+        [String] $CloudServiceName,
+
+        [Parameter(ParameterSetName='ComputerName')]
+        [ValidateNotNullOrEmpty()]
+        [String] $ComputerName,
+
+        [Parameter(ParameterSetName='List')]
+        [Switch] $List,
+
+        [Switch] $VMMEnhanced
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+
+            # Note we copy the WAPack Tenant Portal behaviour where the $CloudServiceName and $VMRoleName are identical and there is only 1 VMRole per CloudService
+            $URI = '{0}:{1}/{2}/CloudServices/{3}/Resources/MicrosoftCompute/VMRoles/{3}/VMs?api-version=2013-03' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$CloudServiceName
+            Write-Verbose -Message "Constructed VMRole URI: $URI"
+
+            $VMs = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
+
+            if ($VMMEnhanced) {
+                $StampId=(Get-WAPVMMCloud).StampId
+                Write-Verbose -Message "StampId: $StampId"
+            }
+
+            foreach ($V in $VMs.value) {
+                if ($PSCmdlet.ParameterSetName -eq 'ComputerName' -and $V.ComputerName -ne $ComputerName) {
+                    continue
+                }
+                Add-Member -InputObject $V -MemberType NoteProperty -Name IPAddress -Value $V.ConnectToAddresses.IPAddress
+                Add-Member -InputObject $V -MemberType NoteProperty -Name NetworkName -Value $V.ConnectToAddresses.NetworkName
+                Add-Member -InputObject $V -MemberType NoteProperty -Name ParentCloudServiceName -Value $CloudServiceName
+                if ($VMMEnhanced) {
+                    $VMMURI = '{0}:{1}/{2}/services/systemcenter/vmm/VirtualMachines(ID=guid''{{{3}}}'',StampId=guid''{{{4}}}'')' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$V.Id,$StampId
+                    Write-Verbose -Message "Constructed VMM URI: $VMMURI"
+                    
+                    $VMMVM = Invoke-RestMethod -Uri $VMMURI -Headers $Headers -Method Get                    
+
+                    Add-Member -InputObject $V -MemberType NoteProperty -Name VMMOwnerUserName -Value $VMMVM.Owner.UserName
+                    Add-Member -InputObject $V -MemberType NoteProperty -Name VMMCreationTime -Value $VMMVM.CreationTime
+                    Add-Member -InputObject $V -MemberType NoteProperty -Name VMMDeploymentErrorInfo -Value $VMMVM.DeploymentErrorInfo
+                    Add-Member -InputObject $V -MemberType NoteProperty -Name VMMStatus -Value $VMMVM.Status
+                }
+                $V.PSObject.TypeNames.Insert(0,'WAP.VM')
+                Write-Output -InputObject $V
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Get-WAPVMMCloud {
+    <#
+    .SYNOPSIS
+        Retrieves VMM Cloud information for the selected Subscription from Azure Pack TenantPublic or Tenant API.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>Get-WAPVMMCloud
+
+        This will get the VMM Cloud information (CloudId, CloudName and StampId) for the selected subscription
+    #>
+    [OutputType([PSCustomObject])]
+    [CmdletBinding()]
+    param (
+
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+            
+            $VMMURIClouds = '{0}:{1}/{2}/services/systemcenter/vmm/Clouds' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
+            Write-Verbose -Message "Constructed VMMCloud URI: $VMMURIClouds"
+            
+            $VMMClouds = Invoke-RestMethod -Uri $VMMURIClouds -Headers $Headers -Method Get
+            
+            # Note that technically only 1 cloud can be returned per subscription in Windows Azure Pack, foreach > just to be sure
+            foreach ($C in $VMMClouds.value) {
+                $C.PSObject.TypeNames.Insert(0,'VMM.Clouds')
+                Write-Output -InputObject $C
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Connect-WAPVMRDP {
+    <#
+    .SYNOPSIS
+        Launches MSTSC connecting to VM using VM available information.
+
+    .PARAMETER VM
+        A VM Object returned by Get-WAPVMRoleVM.
+
+    .PARAMETER IPv6
+        IPv4 connection is used by default. If IPv6 is desired instead, use this switch.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>Get-WAPCloudService -Name DCs | Get-WAPVMRoleVM | Connect-WAPVMRDP
+
+        This will launch MSTSC for each VM deployed in the VM Role DCs.
+    #>
+    [CmdletBinding()]
+    [OutputType([void])]
+    param (
+        [Parameter(Mandatory,
+                   ValueFromPipeline)]
+        [ValidateNotNull()]
+        [PSCustomObject] $VM,
+
+        [Switch] $IPv6
+    )
+    process {
+        try {
+            if (!($VM.pstypenames.Contains('WAP.VM'))) {
+                throw 'Object bound to VM parameter is of the wrong type'
+            }
+            if ($null -eq $VM.ConnectToAddresses) {
+                throw 'Unable to find VM Connection Information'
+            }
+            if ($IPv6) {
+                $ConnectionParameters = $vm.ConnectToAddresses | Where-Object -FilterScript {([ipaddress]$_.ipaddress).IsIPv6LinkLocal -or ([ipaddress]$_.ipaddress).IsIPv6SiteLocal}
+            } else {
+                $ConnectionParameters = $vm.ConnectToAddresses | Where-Object -FilterScript {(!([ipaddress]$_.ipaddress).IsIPv6LinkLocal) -and (!([ipaddress]$_.ipaddress).IsIPv6SiteLocal)}
+            }
+            if ($ConnectionParameters -is [array]) {
+                Write-Warning -Message 'Multiple connection posibilities, choose the desired one:'
+                do {
+                    for ($i = 0; $i -lt $ConnectionParameters.count; $i++) {
+                        "$i`: $($ConnectionParameters[$i].IPAddress) $($ConnectionParameters[$i].Port)"
+                    }
+                    $Choice = Read-Host -Prompt 'Select desired connection:'
+                } until ($null -ne $ConnectionParameters[$Choice])
+                $ConnectionParameters = $ConnectionParameters[$Choice]
+            }
+            if ($null -eq $ConnectionParameters) {
+                throw 'No valid connection parameters where discovered'
+            }
+            Start-Process -FilePath "$($env:SystemRoot)\system32\mstsc.exe" -ArgumentList "/V:$($ConnectionParameters.IPAddress):$($ConnectionParameters.Port)" -WindowStyle Normal | Out-Null
+        } catch {
+            Write-Error -ErrorRecord $_
         }
     }
 }

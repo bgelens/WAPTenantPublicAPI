@@ -82,4 +82,16 @@ Get-WAPCloudService | Get-WAPVMRole | select *
 
 #get more details about specific deployed VM Role
 Get-WAPCloudService -Name test | Get-WAPVMRole | select *
+
+#list VM instances deployed as part of the VM Role
+C:\>Get-WAPCloudService -Name DCs | Get-WAPVMRoleVM
+
+#get additional information for VM Role deployed VM instance
+Get-WAPCloudService -Name DCs | Get-WAPVMroleVM -VMMEnhanced
+
+#connect to VM Role VM instances over RDP
+C:\>Get-WAPCloudService -Name DCs | Get-WAPVMRoleVM | Connect-WAPVMRDP
+
+#connect to specific VM Role VM instance over RDP
+C:\>Get-WAPCloudService -Name DCs | Get-WAPVMRoleVM -Name SRV001 | Connect-WAPVMRDP
 ```

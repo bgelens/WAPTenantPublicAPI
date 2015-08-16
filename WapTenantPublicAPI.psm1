@@ -1293,7 +1293,7 @@ function Get-WAPVMRoleVM {
                     $VMMVM = Invoke-RestMethod -Uri $VMMURI -Headers $Headers -Method Get                    
 
                     Add-Member -InputObject $V -MemberType NoteProperty -Name VMMOwnerUserName -Value $VMMVM.Owner.UserName
-                    Add-Member -InputObject $V -MemberType NoteProperty -Name VMMCreationTime -Value $VMMVM.CreationTime
+                    Add-Member -InputObject $V -MemberType NoteProperty -Name VMMCreationTime -Value ([datetime]$VMMVM.CreationTime)
                     Add-Member -InputObject $V -MemberType NoteProperty -Name VMMDeploymentErrorInfo -Value $VMMVM.DeploymentErrorInfo
                     Add-Member -InputObject $V -MemberType NoteProperty -Name VMMStatus -Value $VMMVM.Status
                 }
@@ -1384,7 +1384,7 @@ function Connect-WAPVMRDP {
         This will launch MSTSC for each VM deployed in the VM Role DCs.
     #>
     [CmdletBinding()]
-    [OutputType([void])]
+    [OutputType([void],[System.String])]
     param (
         [Parameter(Mandatory,
                    ValueFromPipeline)]

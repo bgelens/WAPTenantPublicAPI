@@ -110,7 +110,6 @@ function PreFlight {
             throw 'No Subscription has been selected yet, run Select-WAPSubscription first!'
         }
     }
-
 }
 
 function Get-WAPToken {
@@ -149,7 +148,7 @@ function Get-WAPToken {
         This will return a bearer token from WAP STS using the non default port 443.
     #>
     [CmdletBinding()]
-    [OutputType([System.String])]
+    [OutputType([void],[System.String])]
     param (
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
@@ -320,9 +319,6 @@ function Get-WAPSubscription {
     .PARAMETER Id
         The Id of the subscription to be acquired.
 
-    .PARAMETER List
-        A list of all subscriptions the user has access to.
-
     .EXAMPLE
         PS C:\>$URL = 'https://publictenantapi.mydomain.com'
         PS C:\>$creds = Get-Credential
@@ -353,9 +349,6 @@ function Get-WAPSubscription {
                    ParameterSetName='Id')]
         [ValidateNotNullOrEmpty()]
         [String] $Id,
-
-        [Parameter(ParameterSetName='List')]
-        [Switch] $List,
 
         [Parameter(ParameterSetName='Current')]
         [Switch] $Current
@@ -446,9 +439,6 @@ function Get-WAPGalleryVMRole {
     .SYNOPSIS
         Retrieves VM Role Gallery Items asigned to Tenant user Subscription from Azure Pack TenantPublic or Tenant API.
 
-    .PARAMETER List
-        Defaults to list mode. Shows all VM Role Gallery Items.
-
     .PARAMETER Name
         When Name is specified, only the VM Role Gallery Item with the specified name is returned.
 
@@ -475,9 +465,6 @@ function Get-WAPGalleryVMRole {
     [CmdletBinding(DefaultParameterSetName='List')]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(ParameterSetName='List')]
-        [Switch] $List,
-
         [Parameter(Mandatory,
                    ParameterSetName='Name')]
         [ValidateNotNullOrEmpty()]
@@ -612,9 +599,6 @@ function Get-WAPVMNetwork {
     .SYNOPSIS
         Retrieves subscription available VM Networks from Azure Pack TenantPublic or Tenant API.
 
-    .PARAMETER List
-        Defaults to list mode. Shows all VM Networks available to the subscription.
-
     .PARAMETER Name
         When Name is specified, only the VM Network with the specified name is returned.
 
@@ -631,9 +615,6 @@ function Get-WAPVMNetwork {
     [CmdletBinding(DefaultParameterSetName='List')]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(ParameterSetName='List')]
-        [Switch] $List,
-
         [Parameter(Mandatory,
                    ParameterSetName='Name')]
         [ValidateNotNullOrEmpty()]
@@ -815,9 +796,6 @@ function Get-WAPCloudService {
     .SYNOPSIS
         Retrieves Cloudservice deployed to subscription from Azure Pack TenantPublic or Tenant API.
 
-    .PARAMETER List
-        Defaults to list mode. Shows all cloud services provisioned for the subscription.
-
     .PARAMETER Name
         When Name is specified, only the cloud service with the specified name is returned.
 
@@ -834,9 +812,6 @@ function Get-WAPCloudService {
     [CmdletBinding(DefaultParameterSetName = 'List')]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(ParameterSetName = 'List')]
-        [Switch] $List,
-
         [Parameter(Mandatory,
                    ValueFromPipelineByPropertyName,
                    ParameterSetName = 'Name')]
@@ -1220,9 +1195,6 @@ function Get-WAPVMRoleVM {
     .PARAMETER CloudServiceName
         The name of the cloud service to get VM information from.
 
-    .PARAMETER List
-        Defaults to list mode. Shows all VMs provisioned under the VM Role.
-
     .PARAMETER ComputerName
         When ComputerName is specified, only the VM with the specified ComputerName is returned.
 
@@ -1252,9 +1224,6 @@ function Get-WAPVMRoleVM {
         [Parameter(ParameterSetName='ComputerName')]
         [ValidateNotNullOrEmpty()]
         [String] $ComputerName,
-
-        [Parameter(ParameterSetName='List')]
-        [Switch] $List,
 
         [Switch] $VMMEnhanced
     )

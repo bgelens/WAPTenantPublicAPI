@@ -1,7 +1,7 @@
 ﻿Get-WAPToken -URL https://sts.bgelens.nl -ADFS -Credential administrator@gelens.int
 Connect-WAPAPI -Url https://api.bgelens.nl -Port 443
 Get-WAPSubscription -Name Test | Select-WAPSubscription
-$GI = Get-WAPGalleryVMRole -Name DSCPullServerClient
+$GI = Get-WAPGalleryVMRole -Name DSCPullServerClient #-Version 2.0.0.0
 $OSDisk = $GI | Get-WAPVMRoleOSDisk | Sort-Object -Property AddedTime -Descending | Select-Object -First 1
 $NW = Get-WAPVMNetwork -Name internal
 $VMProps = New-WAPVMRoleParameterObject -VMRole $GI -OSDisk $OSDisk -VMRoleVMSize Medium -VMNetwork $NW

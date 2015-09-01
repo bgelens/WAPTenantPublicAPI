@@ -1,5 +1,5 @@
 ﻿#requires -version 4
-
+Set-StrictMode -Version Latest
 Add-Type -AssemblyName 'System.ServiceModel, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089'
 Add-Type -AssemblyName 'System.IdentityModel, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089'
 
@@ -123,9 +123,6 @@ function Get-WAPToken {
     .PARAMETER Port
         The Port on which ADFS or WAP STS is listening. Default for ADFS is 443, for WAP STS 30071.
 
-    .PARAMETER ClientRealm
-        The realm name of either the TenantSite (default) or AdminSite.
-
     .PARAMETER Credential
         Credentials to acquire the bearer token.
 
@@ -134,6 +131,15 @@ function Get-WAPToken {
 
     .PARAMETER IgnoreSSL
         When using self-signed certificates, SSL validation will be ignored when this switch is enabled.
+
+    .PARAMETER Admin
+        When specified, authentication will take place against Admin client realm instead of default Tenant clientrealm.
+
+    .PARAMETER ForOnBehalfOfUser
+        When specified, subsequent functions will invoke actions on behalf of the user.
+
+    .PARAMETER UpdateForOnBehalfOfUserOnly
+        Don't get a new token, just update the ForOnBehalfUser.
 
     .EXAMPLE
         PS C:\>$creds = Get-Credential
@@ -146,31 +152,92 @@ function Get-WAPToken {
         PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.wap.com' -Port 443
 
         This will return a bearer token from WAP STS using the non default port 443.
+
+    .EXAMPLE
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.wap.com' -Port 443 -Admin -ForOnBehalfOfUser TenantUser@TenantDomain
+
+        This will return a bearer token from WAP STS using the non default port 443 using the Admin Client realm and targeting TenantUser@TenantDomain
+
+    .EXAMPLE
+        PS C:\>Get-WAPToken -Admin -ForOnBehalfOfUser TenantUser@TenantDomain -UpdateForOnBehalfOfUserOnly
+
+        This will update the Admin action targeting onbehalf of TenantUser@TenantDomain without getting a new Admin Token.
     #>
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName='Tenant')]
     [OutputType([void],[System.String])]
     param (
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory,
+                   ParameterSetName='Tenant')]
+        [Parameter(Mandatory,
+                   ParameterSetName='Admin')]
         [ValidateNotNullOrEmpty()]
         [string] $Url, 
 
+        [Parameter(ParameterSetName='Tenant')]
+        [Parameter(ParameterSetName='Admin')]
         [int] $Port,
 
-        [ValidateSet('http://azureservices/AdminSite','http://azureservices/TenantSite')]
-        [String] $ClientRealm = 'http://azureservices/TenantSite',
-
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory,
+                   ParameterSetName='Tenant')]
+        [Parameter(Mandatory,
+                   ParameterSetName='Admin')]
         [System.Management.Automation.Credential()]
         [PSCredential] $Credential,
 
+        [Parameter(ParameterSetName='Tenant')]
+        [Parameter(ParameterSetName='Admin')]
         [Switch] $ADFS,
 
+        [Parameter(ParameterSetName='Tenant')]
+        [Parameter(ParameterSetName='Admin')]
         [Switch] $IgnoreSSL,
 
-        [Switch] $PassThru
+        [Parameter(ParameterSetName='Tenant')]
+        [Parameter(ParameterSetName='Admin')]
+        [Switch] $PassThru,
+
+        [Parameter(Mandatory,
+                   ParameterSetName='Admin')]
+        [Parameter(Mandatory,
+                   ParameterSetName='UpdateForOnBehalfOfUser')]
+        [Switch] $Admin,
+
+        [Parameter(ParameterSetName='Admin')]
+        [Parameter(Mandatory,
+                   ParameterSetName='UpdateForOnBehalfOfUser')]
+        [ValidateNotNullOrEmpty()]
+        [String] $ForOnBehalfOfUser,
+
+        [Parameter(ParameterSetName='UpdateForOnBehalfOfUser')]
+        [Switch] $UpdateForOnBehalfOfUserOnly
     )
+
     try {
         $ErrorActionPreference = 'Stop'
+
+        if ($Admin) {
+            if ($UpdateForOnBehalfOfUserOnly -and $null -ne $Headers) {
+                Set-Variable -Name Headers -Scope 1 -Value @{
+                    Authorization = "Bearer $Token"
+                    'x-ms-principal-id' = $ForOnBehalfOfUser
+                    Accept = 'application/json'
+                }
+                return
+            } elseif ($UpdateForOnBehalfOfUserOnly -and $null -eq $Headers) {
+                throw 'Initial authentication did not occur yet. Run Get-WAPToken without UpdateForOnBehalfOfUserOnly switch first'
+            }
+            $ClientRealm = 'http://azureservices/AdminSite'
+            if ($ForOnBehalfOfUser) {
+                $MSPrincipalId = $ForOnBehalfOfUser
+            } else {
+                $MSPrincipalId = $Credential.UserName
+            }
+        } else {
+            $ClientRealm = 'http://azureservices/TenantSite'
+            $MSPrincipalId = $Credential.UserName
+        }
+
         if ($ADFS -and $Port -eq 0) {
             $Port = 443
         } elseif ($Port -eq 0 -and $clientRealm -eq 'http://azureservices/TenantSite') {
@@ -226,7 +293,7 @@ function Get-WAPToken {
 
         Set-Variable -Name Headers -Scope 1 -Value @{
             Authorization = "Bearer $Token"
-            'x-ms-principal-id' = $Credential.UserName
+            'x-ms-principal-id' = $MSPrincipalId
             Accept = 'application/json'
         }
         Set-Variable -Name Token -Value $token -Scope 1
@@ -284,8 +351,9 @@ function Connect-WAPAPI {
             Write-Warning -Message 'IgnoreSSL switch defined. Certificate errors will be ignored!'
             #Change Certificate Policy to ignore
             IgnoreSSL
-            Set-Variable -Name IgnoreSSL -Value $IgnoreSSL -Scope 1
         }
+        
+        Set-Variable -Name IgnoreSSL -Value $IgnoreSSL -Scope 1
 
         PreFlight
 
@@ -618,9 +686,7 @@ function Get-WAPVMNetwork {
         [Parameter(Mandatory,
                    ParameterSetName='Name')]
         [ValidateNotNullOrEmpty()]
-        [String] $Name,
-
-        [Switch] $IgnoreSSL
+        [String] $Name
     )
     process {
         try {
@@ -643,6 +709,196 @@ function Get-WAPVMNetwork {
                 }
                 $N.PSObject.TypeNames.Insert(0,'WAP.VMNetwork')
                 Write-Output -InputObject $N
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Get-WAPVMNetworkSubnet {
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory,
+                   ValueFromPipeline)]
+        [PSCustomObject] $VMNetwork
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            if (!($VMNetwork.pstypenames.Contains('WAP.VMNetwork'))) {
+                throw 'Object bound to VMNetwork parameter is of the wrong type'
+            }
+            
+            PreFlight -IncludeConnection -IncludeSubscription
+
+            $URI = '{0}:{1}/{2}/services/systemcenter/vmm/VMSubnets?$filter=StampId+eq+guid''{3}''+and+VMNetworkId+eq+guid''{4}''' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$VMNetwork.StampId,$VMNetwork.ID
+            Write-Verbose -Message "Constructed VMNetwork Subnets URI: $URI"
+
+            $Subnets = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get -ContentType application/xml
+    
+            foreach ($S in $Subnets.value) {
+                $S.PSObject.TypeNames.Insert(0,'WAP.Subnet')
+                Write-Output -InputObject $S
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Get-WAPLogicalNetwork {
+    <#
+    .SYNOPSIS
+        Retrieves subscription available Logical Networks from Azure Pack TenantPublic or Tenant API.
+
+    .PARAMETER Name
+        When Name is specified, only the VM Network with the specified name is returned.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>Get-WAPLogicalNetwork
+
+        This will fetch all Logical Networks available to the subscription.
+    #>
+    [CmdletBinding(DefaultParameterSetName='List')]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory,
+                   ParameterSetName='Name')]
+        [ValidateNotNullOrEmpty()]
+        [String] $Name,
+
+        [Switch] $NetworkVirtualizationCapable
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+
+            $URI = '{0}:{1}/{2}/services/systemcenter/vmm/LogicalNetworks' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
+            Write-Verbose -Message "Constructed VMM Logical Networks URI: $URI"
+            
+            $LogicalNWs = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
+            foreach ($L in $LogicalNWs.value) {
+                if ($PSCmdlet.ParameterSetName -eq 'Name' -and $L.Name -ne $Name) {
+                    continue
+                }
+                if ($NetworkVirtualizationCapable -and $L.NetworkVirtualizationEnabled -eq $false) {
+                    continue
+                }
+                $L.PSObject.TypeNames.Insert(0,'WAP.LogicalNetwork')
+                Write-Output -InputObject $L
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function New-WAPVMNetwork {
+    <#
+    .SYNOPSIS
+        Creates new VM Networks for the currently selected subscription.
+
+    .PARAMETER Name
+        A VM Network will be created using this name.
+
+    .PARAMETER LogicalNetwork
+        Logical Network Object to bind VM Network to.
+
+    .PARAMETER AddressFamily
+        VM Network can either be IPv4 (Default) or IPv6.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>New-WAPVMNetwork -Name MyNetwork
+
+        This will create a new VM Network with name MyNetwork.
+    #>
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [String] $Name,
+
+        [Parameter(Mandatory,
+                   ValueFromPipeline)]
+        [ValidateNotNull()]
+        [PSCustomObject] $LogicalNetwork,
+
+        [ValidateNotNullOrEmpty()]
+        [String] $Description
+    )
+    process {
+        try {
+            # // For now, this function can only create VM Networks of type NVGRE.
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            if (!($LogicalNetwork.pstypenames.Contains('WAP.LogicalNetwork'))) {
+                throw 'Object bound to LogicalNetwork parameter is of the wrong type'
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+
+            $URI = '{0}:{1}/{2}/services/systemcenter/vmm/VMNetworks' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
+            Write-Verbose -Message "Constructed VM Networks URI: $URI"
+
+            $Body = @{
+                Name = $Name
+                StampId = $LogicalNetwork.StampId
+                LogicalNetworkId = $LogicalNetwork.ID
+                CAIPAddressPoolType = 'IPv4'
+            }
+            
+            if ($Description) {
+                [void] $Body.Add('Description',$Description)
+            }
+            $Body = $Body | ConvertTo-Json
+
+            if ($PSCmdlet.ShouldProcess($Name)) {
+                $VMNet = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Post -Body $Body -ContentType 'application/json'
+                $VMNet.PSObject.Properties.Remove('odata.metadata')
+                $VMNet.PSObject.TypeNames.Insert(0,'WAP.VMNetwork')
+                Write-Output -InputObject $VMNet
             }
         } catch {
             Write-Error -ErrorRecord $_
@@ -1043,26 +1299,25 @@ function New-WAPVMRoleDeployment {
     )
     process {
         $ErrorActionPreference = 'Stop'
-
-        if (!($VMRole.pstypenames.Contains('MicrosoftCompute.VMRoleGalleryItem'))) {
-            throw 'Object bound to VMRole parameter is of the wrong type'
-        }
-
-        if (!($ParameterObject.pstypenames.Contains('WAP.ParameterObject'))) {
-            throw 'Object bound to ParameterObject parameter is of the wrong type'
-        }
-
-        $ParameterObject | Get-Member -MemberType Properties | ForEach-Object -Process {
-            if ($null -eq $ParameterObject.($_.name)) {
-                throw "ParameterObject property: $($_.name) is NULL"
-            }
-        }
-
         try {
             if ($IgnoreSSL) {
                 Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
                 #Change Certificate Policy to ignore
                 IgnoreSSL
+            }
+
+            if (!($VMRole.pstypenames.Contains('MicrosoftCompute.VMRoleGalleryItem'))) {
+                throw 'Object bound to VMRole parameter is of the wrong type'
+            }
+
+            if (!($ParameterObject.pstypenames.Contains('WAP.ParameterObject'))) {
+                throw 'Object bound to ParameterObject parameter is of the wrong type'
+            }
+
+            $ParameterObject | Get-Member -MemberType Properties | ForEach-Object -Process {
+                if ($null -eq $ParameterObject.($_.name)) {
+                    throw "ParameterObject property: $($_.name) is NULL"
+                }
             }
 
             PreFlight -IncludeConnection -IncludeSubscription
@@ -1244,7 +1499,7 @@ function Get-WAPVMRoleVM {
             $VMs = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
 
             if ($VMMEnhanced) {
-                $StampId=(Get-WAPVMMCloud).StampId
+                $StampId=(Get-WAPCloud).StampId
                 Write-Verbose -Message "StampId: $StampId"
             }
 
@@ -1280,7 +1535,7 @@ function Get-WAPVMRoleVM {
     }
 }
 
-function Get-WAPVMMCloud {
+function Get-WAPCloud {
     <#
     .SYNOPSIS
         Retrieves VMM Cloud information for the selected Subscription from Azure Pack TenantPublic or Tenant API.
@@ -1291,7 +1546,7 @@ function Get-WAPVMMCloud {
         PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
         PS C:\>Connect-WAPAPI -URL $URL
         PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
-        PS C:\>Get-WAPVMMCloud
+        PS C:\>Get-WAPCloud
 
         This will get the VMM Cloud information (CloudId, CloudName and StampId) for the selected subscription
     #>

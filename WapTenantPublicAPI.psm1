@@ -12,30 +12,30 @@ $Subscription = $null
 $OriginalCertificatePolicy = [System.Net.ServicePointManager]::CertificatePolicy
 
 function IgnoreSSL {
-	$Provider = New-Object -TypeName Microsoft.CSharp.CSharpCodeProvider
-	$null = $Provider.CreateCompiler()
-	$Params = New-Object -TypeName System.CodeDom.Compiler.CompilerParameters
-	$Params.GenerateExecutable = $False
-	$Params.GenerateInMemory = $True
-	$Params.IncludeDebugInformation = $False
-	$Params.ReferencedAssemblies.Add('System.DLL') > $null
-	$TASource=@'
-		namespace Local.ToolkitExtensions.Net.CertificatePolicy
-		{
-			public class TrustAll : System.Net.ICertificatePolicy
-			{
-				public TrustAll() {}
-				public bool CheckValidationResult(System.Net.ServicePoint sp,System.Security.Cryptography.X509Certificates.X509Certificate cert, System.Net.WebRequest req, int problem)
-				{
-					return true;
-				}
-			}
-		}
+    $Provider = New-Object -TypeName Microsoft.CSharp.CSharpCodeProvider
+    $null = $Provider.CreateCompiler()
+    $Params = New-Object -TypeName System.CodeDom.Compiler.CompilerParameters
+    $Params.GenerateExecutable = $False
+    $Params.GenerateInMemory = $True
+    $Params.IncludeDebugInformation = $False
+    $Params.ReferencedAssemblies.Add('System.DLL') > $null
+    $TASource=@'
+        namespace Local.ToolkitExtensions.Net.CertificatePolicy
+        {
+            public class TrustAll : System.Net.ICertificatePolicy
+            {
+                public TrustAll() {}
+                public bool CheckValidationResult(System.Net.ServicePoint sp,System.Security.Cryptography.X509Certificates.X509Certificate cert, System.Net.WebRequest req, int problem)
+                {
+                    return true;
+                }
+            }
+        }
 '@ 
-	$TAResults=$Provider.CompileAssemblyFromSource($Params,$TASource)
-	$TAAssembly=$TAResults.CompiledAssembly
+    $TAResults=$Provider.CompileAssemblyFromSource($Params,$TASource)
+    $TAAssembly=$TAResults.CompiledAssembly
     ## We create an instance of TrustAll and attach it to the ServicePointManager
-	$TrustAll = $TAAssembly.CreateInstance('Local.ToolkitExtensions.Net.CertificatePolicy.TrustAll')
+    $TrustAll = $TAAssembly.CreateInstance('Local.ToolkitExtensions.Net.CertificatePolicy.TrustAll')
     [System.Net.ServicePointManager]::CertificatePolicy = $TrustAll
 }
 
@@ -722,6 +722,23 @@ function Get-WAPVMNetwork {
 }
 
 function Get-WAPVMNetworkSubnet {
+     <#
+    .SYNOPSIS
+        Retrieves Subnets provisioned to specified VM Network.
+
+    .PARAMETER VMNetwork
+        VM Network object to be inquired. Acquired via Get-WAPVMNetwork.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>Get-WAPVMNetwork -Name testing1234 | Get-WAPVMNetworkSubnet
+
+        This will fetch all subnets available to the testing1234 VM Network.
+    #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
     param (
@@ -746,11 +763,357 @@ function Get-WAPVMNetworkSubnet {
             $URI = '{0}:{1}/{2}/services/systemcenter/vmm/VMSubnets?$filter=StampId+eq+guid''{3}''+and+VMNetworkId+eq+guid''{4}''' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$VMNetwork.StampId,$VMNetwork.ID
             Write-Verbose -Message "Constructed VMNetwork Subnets URI: $URI"
 
-            $Subnets = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get -ContentType application/xml
+            $Subnets = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get -ContentType application/json
     
             foreach ($S in $Subnets.value) {
                 $S.PSObject.TypeNames.Insert(0,'WAP.Subnet')
                 Write-Output -InputObject $S
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Set-WAPVMNetworkSubnetIPPool {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    [OutputType([Void])]
+    param (
+        [Parameter(Mandatory,
+                   ValueFromPipeline)]
+        [ValidateNotNull()]
+        [PSCustomObject] $IPPool,
+
+        [ValidateNotNullOrEmpty()]
+        [String] $Name,
+
+        [AllowNull()]
+        [String] $Description,
+
+        [String[]] $DNSServers,
+        
+        [ValidateNotNullOrEmpty()]
+        [String] $DNSSuffix,
+
+        [String[]] $DNSSearchSuffixes,
+
+        [Bool] $EnableNetBIOS,
+
+        [String[]] $WINSServers,
+
+        [AllowNull()]
+        #Valid input Range: ip1-ip2
+        #Valid input multiple: ip1,ip2,ip3-ip4
+        [String] $IPAddressReservedSet
+    )
+
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            if (!($IPPool.pstypenames.Contains('WAP.IPPool'))) {
+                throw 'Object bound to IPPool parameter is of the wrong type'
+            }
+            
+            PreFlight -IncludeConnection -IncludeSubscription
+
+            $URI = '{0}:{1}/{2}/services/systemcenter/vmm/StaticIPAddressPools(ID=Guid''{3}'',StampId=Guid''{4}'')' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$IPPool.Id,$IPPool.StampId
+            Write-Verbose -Message "Constructed VMNetwork Subnet IPPool URI: $URI"
+
+            [Void] $PSBoundParameters.Remove('Verbose')
+            [Void] $PSBoundParameters.Remove('Debug')
+            [Void] $PSBoundParameters.Remove('Whatif')
+            [Void] $PSBoundParameters.Remove('IPPool')
+
+            $Body = $PSBoundParameters | ConvertTo-Json
+            if ($PSCmdlet.ShouldProcess($IPPool.Name)) {
+                Invoke-RestMethod -Uri $URI -Headers $Headers -Method Put -Body $Body -ContentType application/json | Out-Null
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function New-WAPVMNetworkSubnetIPPool {
+    [CmdletBinding(DefaultParameterSetName='UnSpecified',
+                   SupportsShouldProcess=$true)]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory,
+                   ValueFromPipeline,
+                   ParameterSetName='Specified')]
+        [Parameter(Mandatory,
+                   ValueFromPipeline,
+                   ParameterSetName='UnSpecified')]
+        [ValidateNotNull()]
+        [PSCustomObject] $Subnet,
+
+        [Parameter(Mandatory,
+                   ValueFromPipeline,
+                   ParameterSetName='Specified')]
+        [Parameter(Mandatory,
+                   ValueFromPipeline,
+                   ParameterSetName='UnSpecified')]
+        [ValidateNotNullOrEmpty()]
+        [String] $Name,
+
+        [Parameter(Mandatory,
+                   ParameterSetName='Specified')]
+        [ipaddress] $IPAddressRangeStart,
+
+        [Parameter(Mandatory,
+                   ParameterSetName='Specified')]
+        [ipaddress] $IPAddressRangeEnd
+    )
+
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            if (!($Subnet.pstypenames.Contains('WAP.Subnet'))) {
+                throw 'Object bound to Subnet parameter is of the wrong type'
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+            
+            $URI = '{0}:{1}/{2}/services/systemcenter/vmm/StaticIPAddressPools' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
+            Write-Verbose -Message "Constructed VMNetwork Add Subnet IPPool URI: $URI"
+
+            $Body = @{
+                StampId = $Subnet.StampId;
+                Name = $Name;
+                Subnet = $Subnet.Subnet;
+                VMSubnetId = $Subnet.ID;
+            }
+
+            if ($PSCmdlet.ParameterSetName -eq 'Specified') {
+                $Body += @{
+                    IPAddressRangeStart = $IPAddressRangeStart.IPAddressToString;
+                    IPAddressRangeEnd = $IPAddressRangeEnd.IPAddressToString;
+                }
+            }
+            $Body = $Body | ConvertTo-Json
+
+            if ($PSCmdlet.ShouldProcess($Name)) {
+                $IPPool = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Post -Body $Body -ContentType application/json
+                $IPPool.PSObject.TypeNames.Insert(0,'WAP.IPPool')
+                Write-Output -InputObject $IPPool
+            }
+
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Remove-WAPVMNetworkSubnetIPPool {
+    [CmdletBinding(SupportsShouldProcess=$true,
+                   ConfirmImpact='High')]
+    param (
+        [Parameter(Mandatory,
+                   ValueFromPipeline)]
+        [PSCustomObject] $IPPool,
+
+        [Switch] $Force
+    )
+
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            if (!($IPPool.pstypenames.Contains('WAP.IPPool'))) {
+                throw 'Object bound to IPPool parameter is of the wrong type'
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+            
+            $URI = '{0}:{1}/{2}/services/systemcenter/vmm/StaticIPAddressPools(ID=Guid''{3}'',StampId=Guid''{4}'')' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$IPPool.ID,$IPPool.StampId
+            Write-Verbose -Message "Constructed VMNetwork Remove Subnet IPPool URI: $URI"
+
+            if ($Force -or $PSCmdlet.ShouldProcess($IPPool.Name)) {
+                Invoke-RestMethod -Uri $URI -Headers $Headers -Method Delete
+            }
+
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Remove-WAPVMNetworkSubnet {
+    [CmdletBinding(SupportsShouldProcess=$true,
+                   ConfirmImpact='High')]
+    param (
+        [Parameter(Mandatory,
+                   ValueFromPipeline)]
+        [PSCustomObject] $Subnet,
+
+        [Switch] $Force
+    )
+
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            if (!($Subnet.pstypenames.Contains('WAP.Subnet'))) {
+                throw 'Object bound to Subnet parameter is of the wrong type'
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+            
+            $URI = '{0}:{1}/{2}/services/systemcenter/vmm/VMSubnets(ID=Guid''{3}'',StampId=Guid''{4}'')' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$Subnet.ID,$Subnet.StampId
+            Write-Verbose -Message "Constructed VMNetwork Subnets URI: $URI"
+
+            if ($Force -or $PSCmdlet.ShouldProcess($Subnet.Name)) {
+                Invoke-RestMethod -Uri $URI -Headers $Headers -Method Delete
+            }
+
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+
+}
+
+function Get-WAPVMNetworkSubnetIPPool {
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory,
+                   ValueFromPipeline)]
+        [PSCustomObject] $Subnet
+    )
+
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            if (!($Subnet.pstypenames.Contains('WAP.Subnet'))) {
+                throw 'Object bound to Subnet parameter is of the wrong type'
+            }
+            
+            PreFlight -IncludeConnection -IncludeSubscription
+
+            $URI = '{0}:{1}/{2}/services/systemcenter/vmm/StaticIPAddressPools?$filter=StampId+eq+guid''{3}''+and+VMSubnetId+eq+guid''{4}''' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$Subnet.StampId,$Subnet.ID
+            Write-Verbose -Message "Constructed VMNetwork Subnet IPPool URI: $URI"
+
+            $IPPools = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
+            foreach ($I in $IPPools.value) {
+                $I.PSObject.Properties.Remove('odata.metadata')
+                $I.PSObject.TypeNames.Insert(0,'WAP.IPPool')
+                Write-Output -InputObject $I
+            }
+
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function New-WAPVMNetworkSubnet {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory,
+                   ValueFromPipeline)]
+        [ValidateNotNull()]
+        [PSCustomObject] $VMNetwork,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [String] $Name,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [ValidateScript({if ($_.split('/').count -ne 2){$false} else {$true}})]
+        [String] $NetworkAddress,
+
+        [Switch] $NoIPPool
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            if (!($VMNetwork.pstypenames.Contains('WAP.VMNetwork'))) {
+                throw 'Object bound to VMNetwork parameter is of the wrong type'
+            }
+            
+            PreFlight -IncludeConnection -IncludeSubscription
+
+            $URI = '{0}:{1}/{2}/services/systemcenter/vmm/VMSubnets' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
+            Write-Verbose -Message "Constructed VMNetwork Add Subnet URI: $URI"
+
+            $Body = @{
+                Name = $Name + 'IPPool';
+                StampId = $VMNetwork.StampId;
+                Subnet = $NetworkAddress;
+                VMNetworkId = $VMNetwork.ID;
+            } | ConvertTo-Json
+
+            if ($PSCmdlet.ShouldProcess($Name)) {
+                $Subnet = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Post -Body $Body -ContentType application/json
+                $Subnet.PSObject.Properties.Remove('odata.metadata')
+                $Subnet.PSObject.TypeNames.Insert(0,'WAP.Subnet')
+                if (!$NoIPPool) {
+                    $IPPool = $Subnet | New-WAPVMNetworkSubnetIPPool  -Name ($name + '-' + $Subscription.SubscriptionId)
+                    Add-Member -InputObject $Subnet -MemberType NoteProperty -Name IPPool -Value $IPPool
+                }
+                Write-Output -InputObject $Subnet
             }
         } catch {
             Write-Error -ErrorRecord $_
@@ -851,6 +1214,7 @@ function New-WAPVMNetwork {
         This will create a new VM Network with name MyNetwork.
     #>
     [CmdletBinding(SupportsShouldProcess=$true)]
+    [OutputType([PSCustomObject])]
     param (
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
@@ -900,6 +1264,68 @@ function New-WAPVMNetwork {
                 $VMNet.PSObject.TypeNames.Insert(0,'WAP.VMNetwork')
                 Write-Output -InputObject $VMNet
             }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Remove-WAPVMNetwork {
+    <#
+    .SYNOPSIS
+        Removes VM Networks for the currently selected subscription.
+
+    .PARAMETER VMNetwork
+        VM Network object to be removed. Acquired via Get-WAPVMNetwork.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>Get-WAPVMNetwork -Name MyNetwork | Remove-WAPVMNetwork
+
+        This will remove the VM Network with name MyNetwork.
+    #>
+    [CmdletBinding(SupportsShouldProcess=$true,
+                   ConfirmImpact='High')]
+    [OutputType([Void])]
+    param (
+        [Parameter(Mandatory,
+                   ValueFromPipeline)]
+        [ValidateNotNull()]
+        [PSCustomObject] $VMNetwork,
+
+        [Switch] $Force
+    )
+    #// TODO: for now, only support pipeline VMNetwork. Later support Name/ID?
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            if (!($VMNetwork.pstypenames.Contains('WAP.VMNetwork'))) {
+                throw 'Object bound to LogicalNetwork parameter is of the wrong type'
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+
+            $RemURI = '{0}:{1}/{2}/services/systemcenter/vmm/VMNetworks(ID=guid''{3}'',StampId=guid''{4}'')' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$VMNetwork.ID,$VMNetwork.StampId
+            Write-Verbose -Message "Constructed Remove VM Network URI: $RemURI"
+
+            if ($Force -or $PSCmdlet.ShouldProcess($VMNetwork.Name)) {
+                Invoke-RestMethod -Uri $RemURI -Method Delete -Headers $Headers | Out-Null
+            }
+
         } catch {
             Write-Error -ErrorRecord $_
         } finally {

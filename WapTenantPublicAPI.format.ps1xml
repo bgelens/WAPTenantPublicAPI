@@ -2,7 +2,7 @@
 <Configuration>
     <ViewDefinitions>
         <View>
-            <Name>WAP.Subscription</Name>
+          <Name>WAP.Subscription</Name>
             <ViewSelectedBy>
                 <TypeName>WAP.Subscription</TypeName>
             </ViewSelectedBy>
@@ -26,7 +26,31 @@
         </View>
 
         <View>
-            <Name>MicrosoftCompute.VMRoleGalleryItem</Name>
+          <Name>WAP.VMRoleSizeProfile</Name>
+            <ViewSelectedBy>
+              <TypeName>WAP.VMRoleSizeProfile</TypeName>
+            </ViewSelectedBy>
+          <ListControl>
+            <ListEntries>
+              <ListEntry>
+                <ListItems>
+                  <ListItem>
+                    <PropertyName>Name</PropertyName>
+                  </ListItem>
+                  <ListItem>
+                    <PropertyName>CpuCount</PropertyName>
+                  </ListItem>
+                  <ListItem>
+                    <PropertyName>MemoryInMB</PropertyName>
+                  </ListItem>
+                </ListItems>
+              </ListEntry>
+            </ListEntries>
+          </ListControl>
+        </View>
+
+      <View>
+          <Name>MicrosoftCompute.VMRoleGalleryItem</Name>
             <ViewSelectedBy>
                 <TypeName>MicrosoftCompute.VMRoleGalleryItem</TypeName>
             </ViewSelectedBy>
@@ -177,5 +201,93 @@
                 </ListEntries>
             </ListControl>
         </View>
+
+        <View>
+          <Name>WAP.LogicalNetwork</Name>
+          <ViewSelectedBy>
+            <TypeName>WAP.LogicalNetwork</TypeName>
+          </ViewSelectedBy>
+          <ListControl>
+            <ListEntries>
+              <ListEntry>
+                <ListItems>
+                  <ListItem>
+                    <PropertyName>Name</PropertyName>
+                  </ListItem>
+                  <ListItem>
+                    <PropertyName>Description</PropertyName>
+                  </ListItem>
+                  <ListItem>
+                    <PropertyName>NetworkVirtualizationEnabled</PropertyName>
+                  </ListItem>
+                </ListItems>
+              </ListEntry>
+            </ListEntries>
+          </ListControl>
+        </View>
+
+      <View>
+        <Name>WAP.Subnet</Name>
+        <ViewSelectedBy>
+          <TypeName>WAP.Subnet</TypeName>
+        </ViewSelectedBy>
+        <ListControl>
+          <ListEntries>
+            <ListEntry>
+              <ListItems>
+                <ListItem>
+                  <PropertyName>Name</PropertyName>
+                </ListItem>
+                <ListItem>
+                  <PropertyName>Subnet</PropertyName>
+                </ListItem>
+                <ListItem>
+                  <PropertyName>VMNetworkName</PropertyName>
+                </ListItem>
+              </ListItems>
+            </ListEntry>
+          </ListEntries>
+        </ListControl>
+      </View>
+
+      <View>
+        <Name>WAP.IPPool</Name>
+        <ViewSelectedBy>
+          <TypeName>WAP.IPPool</TypeName>
+        </ViewSelectedBy>
+        <ListControl>
+          <ListEntries>
+            <ListEntry>
+              <ListItems>
+                <ListItem>
+                  <PropertyName>Name</PropertyName>
+                </ListItem>
+                <ListItem>
+                  <PropertyName>Subnet</PropertyName>
+                </ListItem>
+                <ListItem>
+                  <PropertyName>DNSServers</PropertyName>
+                </ListItem>
+                <ListItem>
+                  <PropertyName>DNSSuffix</PropertyName>
+                </ListItem>
+                <ListItem>
+                  <PropertyName>IPAddressRangeStart</PropertyName>
+                </ListItem>
+                <ListItem>
+                  <PropertyName>IPAddressRangeEnd</PropertyName>
+                </ListItem>
+                <ListItem>
+                  <PropertyName>Description</PropertyName>
+                </ListItem>
+                <ListItem>
+                  <PropertyName>AvailableAddresses</PropertyName>
+                </ListItem>
+              </ListItems>
+            </ListEntry>
+          </ListEntries>
+        </ListControl>
+      </View>
+      
     </ViewDefinitions>
 </Configuration>

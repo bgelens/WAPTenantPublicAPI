@@ -1,5 +1,5 @@
 ﻿#requires -version 4
-Set-StrictMode -Version Latest
+#Set-StrictMode -Version Latest  # // TODO: Bug in Get-WAPVMRoleOSDisk
 Add-Type -AssemblyName 'System.ServiceModel, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089'
 Add-Type -AssemblyName 'System.IdentityModel, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089'
 
@@ -41,9 +41,7 @@ function IgnoreSSL {
 
 function TestJWTClaimNotExpired {
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipeline,
-                   ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [ValidateNotNullOrEmpty()]
         [String] $Token
     )
@@ -167,10 +165,8 @@ function Get-WAPToken {
     [CmdletBinding(DefaultParameterSetName='Tenant')]
     [OutputType([void],[System.String])]
     param (
-        [Parameter(Mandatory,
-                   ParameterSetName='Tenant')]
-        [Parameter(Mandatory,
-                   ParameterSetName='Admin')]
+        [Parameter(Mandatory, ParameterSetName='Tenant')]
+        [Parameter(Mandatory, ParameterSetName='Admin')]
         [ValidateNotNullOrEmpty()]
         [string] $Url, 
 
@@ -178,12 +174,10 @@ function Get-WAPToken {
         [Parameter(ParameterSetName='Admin')]
         [int] $Port,
 
-        [Parameter(Mandatory,
-                   ParameterSetName='Tenant')]
-        [Parameter(Mandatory,
-                   ParameterSetName='Admin')]
-        [System.Management.Automation.Credential()]
-        [PSCredential] $Credential,
+        [Parameter(Mandatory, ParameterSetName='Tenant')]
+        [Parameter(Mandatory, ParameterSetName='Admin')]
+        [PSCredential]
+        [System.Management.Automation.Credential()] $Credential,
 
         [Parameter(ParameterSetName='Tenant')]
         [Parameter(ParameterSetName='Admin')]
@@ -197,15 +191,12 @@ function Get-WAPToken {
         [Parameter(ParameterSetName='Admin')]
         [Switch] $PassThru,
 
-        [Parameter(Mandatory,
-                   ParameterSetName='Admin')]
-        [Parameter(Mandatory,
-                   ParameterSetName='UpdateForOnBehalfOfUser')]
+        [Parameter(Mandatory, ParameterSetName='Admin')]
+        [Parameter(Mandatory, ParameterSetName='UpdateForOnBehalfOfUser')]
         [Switch] $Admin,
 
         [Parameter(ParameterSetName='Admin')]
-        [Parameter(Mandatory,
-                   ParameterSetName='UpdateForOnBehalfOfUser')]
+        [Parameter(Mandatory, ParameterSetName='UpdateForOnBehalfOfUser')]
         [ValidateNotNullOrEmpty()]
         [String] $ForOnBehalfOfUser,
 
@@ -408,13 +399,11 @@ function Get-WAPSubscription {
     [CmdletBinding(DefaultParameterSetName='List')]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(Mandatory,
-                   ParameterSetName='Name')]
+        [Parameter(Mandatory, ParameterSetName='Name')]
         [ValidateNotNullOrEmpty()]
         [String] $Name,
 
-        [Parameter(Mandatory,
-                   ParameterSetName='Id')]
+        [Parameter(Mandatory, ParameterSetName='Id')]
         [ValidateNotNullOrEmpty()]
         [String] $Id,
 
@@ -481,9 +470,7 @@ function Select-WAPSubscription {
     #>
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipeline,
-                   ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [ValidateNotNull()]
         [PSCustomObject] $Subscription
     )
@@ -533,8 +520,7 @@ function Get-WAPGalleryVMRole {
     [CmdletBinding(DefaultParameterSetName='List')]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(Mandatory,
-                   ParameterSetName='Name')]
+        [Parameter(Mandatory, ParameterSetName='Name')]
         [ValidateNotNullOrEmpty()]
         [String] $Name,
 
@@ -613,8 +599,7 @@ function Get-WAPVMRoleOSDisk {
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [ValidateNotNull()]
         [PSCustomObject] $ViewDef
     )
@@ -638,6 +623,7 @@ function Get-WAPVMRoleOSDisk {
             $Images = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
             foreach ($I in $Images.value) {
                 $Tags = $I.tag
+                # // TODO: Compare-Object could have 0 results for sideindicator. This will throw an error when strictmode is on!!!
                 if ($null -eq (Compare-Object -ReferenceObject $Tags -DifferenceObject $OSDiskParam.ImageTags).SideIndicator) {
                     if ($I.enabled -eq $false) {
                         continue
@@ -683,8 +669,7 @@ function Get-WAPVMNetwork {
     [CmdletBinding(DefaultParameterSetName='List')]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(Mandatory,
-                   ParameterSetName='Name')]
+        [Parameter(Mandatory, ParameterSetName='Name')]
         [ValidateNotNullOrEmpty()]
         [String] $Name
     )
@@ -742,8 +727,7 @@ function Get-WAPVMNetworkSubnet {
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipeline)]
+        [Parameter(Mandatory, ValueFromPipeline)]
         [PSCustomObject] $VMNetwork
     )
     process {
@@ -781,11 +765,59 @@ function Get-WAPVMNetworkSubnet {
 }
 
 function Set-WAPVMNetworkSubnetIPPool {
+    <#
+    .SYNOPSIS
+        Configures IPPool Settings.
+
+    .PARAMETER IPPool
+        IPPool object to configure. Acquired via Get-WAPVMNetworkSubnetIPPool.
+
+    .PARAMETER Name
+        Configures the Name of the IPPool.
+
+    .PARAMETER Description
+        Configures the Description of the IPPool.
+        Specify $Null to remove the current description.
+
+    .PARAMETER DNSServers
+        Configures the DNS servers of the IPPool.
+        Specify an empty array @() when you want to clear the DNS servers from the IPPool.
+
+    .PARAMETER DNSSuffix
+        Configures the DNS suffix of the IPPool.
+
+    .PARAMETER DNSSearchSuffixes
+        Configures the DNS Search Suffixes for the IPPool.
+        Specify an empty array @() when you want to clear the DNS Search suffixes from the IPPool.
+
+    .PARAMETER EnableNetBIOS
+        Enables or Disables Netbios over TCP for the IPPool.
+
+    .PARAMETER WINSServers
+        Configures the WINS Servers for the IPPool.
+        Specify an empty array @() when you want to clear the WINS Servers from the IPPool.
+
+    .PARAMETER IPAddressReservedSet
+        Configures reserved IP Addresses for the IPPool.
+        Specify $Null to clear the reserved IP Addresses from the IPPool.
+        Specify IPaddress-IPaddress to configure a range.
+        Specify a comma separated list to configure multiple addresses and / or ranges.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>$Subnet = Get-WAPVMNetwork -Name testing1234 | Get-WAPVMNetworkSubnet
+        PS C:\>$Subnet | Set-WAPVMNetworkSubnetIPPool -DNSServers 10.10.10.10,10.10.10.11 -DNSSuffix lab.local
+
+        This will configure the Subnet bound to VMNetwork 'testing1234' with DNSServers and a DNSSuffix.
+    #>
     [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([Void])]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipeline)]
+        [Parameter(Mandatory, ValueFromPipeline)]
         [ValidateNotNull()]
         [PSCustomObject] $IPPool,
 
@@ -850,34 +882,55 @@ function Set-WAPVMNetworkSubnetIPPool {
 }
 
 function New-WAPVMNetworkSubnetIPPool {
-    [CmdletBinding(DefaultParameterSetName='UnSpecified',
-                   SupportsShouldProcess=$true)]
+    <#
+    .SYNOPSIS
+        Creates IPPool for a Subnet.
+
+    .PARAMETER Subnet
+        Subnet object to create IPPool for. Acquired via Get-WAPVMNetworkSubnet.
+
+    .PARAMETER Name
+        Configures the name for the IPPool.
+
+    .PARAMETER IPAddressRangeStart
+        By default this function uses the entire Subnet address space. If this parameter is specified, a custom address range can be specified for the IPPool.
+        When specified, IPAddressRangeEnd must be specified as well.
+
+    .PARAMETER IPAddressRangeEnd
+        By default this function uses the entire Subnet address space. If this parameter is specified, a custom address range can be specified for the IPPool.
+        When specified, IPAddressRangeStart must be specified as well.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>$LNet = Get-WAPLogicalNetwork -Name 'PA Network'
+        PS C:\>$VMNet = New-WAPVMNetwork -Name Next -LogicalNetwork $LNet -Verbose
+        PS C:\>$Subnet = $VMNet | New-WAPVMNetworkSubnet -Name MySubnet -NoIPPool
+        PS C:\>$Subnet | New-WAPVMNetworkSubnetIPPool -Name MyIPPool
+
+
+        This will configure an IPPool bound the 'MySubnet' subnet.
+    #>
+    [CmdletBinding(DefaultParameterSetName='UnSpecified', SupportsShouldProcess=$true)]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipeline,
-                   ParameterSetName='Specified')]
-        [Parameter(Mandatory,
-                   ValueFromPipeline,
-                   ParameterSetName='UnSpecified')]
+        [Parameter(Mandatory, ValueFromPipeline, ParameterSetName='Specified')]
+        [Parameter(Mandatory, ValueFromPipeline, ParameterSetName='UnSpecified')]
         [ValidateNotNull()]
         [PSCustomObject] $Subnet,
 
-        [Parameter(Mandatory,
-                   ValueFromPipeline,
-                   ParameterSetName='Specified')]
-        [Parameter(Mandatory,
-                   ValueFromPipeline,
-                   ParameterSetName='UnSpecified')]
+        [Parameter(Mandatory, ParameterSetName='Specified')]
+        [Parameter(Mandatory, ParameterSetName='UnSpecified')]
         [ValidateNotNullOrEmpty()]
         [String] $Name,
 
-        [Parameter(Mandatory,
-                   ParameterSetName='Specified')]
+        [Parameter(Mandatory, ParameterSetName='Specified')]
         [ipaddress] $IPAddressRangeStart,
 
-        [Parameter(Mandatory,
-                   ParameterSetName='Specified')]
+        [Parameter(Mandatory, ParameterSetName='Specified')]
         [ipaddress] $IPAddressRangeEnd
     )
 
@@ -931,11 +984,26 @@ function New-WAPVMNetworkSubnetIPPool {
 }
 
 function Remove-WAPVMNetworkSubnetIPPool {
-    [CmdletBinding(SupportsShouldProcess=$true,
-                   ConfirmImpact='High')]
+    <#
+    .SYNOPSIS
+        Removes an IPPool from a Subnet.
+
+    .PARAMETER IPPool
+        IPPool object to remove. Acquired via Get-WAPVMNetworkSubnetIPPool.
+
+    .PARAMETER Force
+        When specified, confirmation prompt will not presented.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+    #>
+    [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipeline)]
+        [Parameter(Mandatory, ValueFromPipeline)]
         [PSCustomObject] $IPPool,
 
         [Switch] $Force
@@ -974,11 +1042,26 @@ function Remove-WAPVMNetworkSubnetIPPool {
 }
 
 function Remove-WAPVMNetworkSubnet {
-    [CmdletBinding(SupportsShouldProcess=$true,
-                   ConfirmImpact='High')]
+    <#
+    .SYNOPSIS
+        Removes a Subnet from a VMNetwork.
+
+    .PARAMETER IPPool
+        Subnet object to remove. Acquired via Get-WAPVMNetworkSubnet.
+
+    .PARAMETER Force
+        When specified, confirmation prompt will not presented.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+    #>
+    [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipeline)]
+        [Parameter(Mandatory, ValueFromPipeline)]
         [PSCustomObject] $Subnet,
 
         [Switch] $Force
@@ -1018,11 +1101,24 @@ function Remove-WAPVMNetworkSubnet {
 }
 
 function Get-WAPVMNetworkSubnetIPPool {
+    <#
+    .SYNOPSIS
+        Gets an IPPool from a Subnet.
+
+    .PARAMETER Subnet
+        Subnet object to get IPPool from. Acquired via Get-WAPVMNetworkSubnet.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+    #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipeline)]
+        [Parameter(Mandatory, ValueFromPipeline)]
         [PSCustomObject] $Subnet
     )
 
@@ -1062,11 +1158,29 @@ function Get-WAPVMNetworkSubnetIPPool {
 }
 
 function New-WAPVMNetworkSubnet {
+    <#
+    .SYNOPSIS
+        Creates a Subnet for a VMNetwork.
+
+    .PARAMETER VMNetwork
+
+    .PARAMETER Name
+
+    .PARAMETER NetworkAddress
+
+    .PARAMETER NoIPPool
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+    #>
     [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipeline)]
+        [Parameter(Mandatory, ValueFromPipeline)]
         [ValidateNotNull()]
         [PSCustomObject] $VMNetwork,
 
@@ -1091,6 +1205,10 @@ function New-WAPVMNetworkSubnet {
 
             if (!($VMNetwork.pstypenames.Contains('WAP.VMNetwork'))) {
                 throw 'Object bound to VMNetwork parameter is of the wrong type'
+            }
+
+            if ($VMNetwork.IsolationType -ne 'WindowsNetworkVirtualization') {
+                throw 'New subnets can only be created on Network Virtualization enabled networks'
             }
             
             PreFlight -IncludeConnection -IncludeSubscription
@@ -1147,12 +1265,11 @@ function Get-WAPLogicalNetwork {
     [CmdletBinding(DefaultParameterSetName='List')]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(Mandatory,
-                   ParameterSetName='Name')]
+        [Parameter(Mandatory, ParameterSetName='Name')]
         [ValidateNotNullOrEmpty()]
         [String] $Name,
 
-        [Switch] $NetworkVirtualizationCapable
+        [Switch] $OnlyNetworkVirtualizationCapable
     )
     process {
         try {
@@ -1172,7 +1289,7 @@ function Get-WAPLogicalNetwork {
                 if ($PSCmdlet.ParameterSetName -eq 'Name' -and $L.Name -ne $Name) {
                     continue
                 }
-                if ($NetworkVirtualizationCapable -and $L.NetworkVirtualizationEnabled -eq $false) {
+                if ($OnlyNetworkVirtualizationCapable -and $L.NetworkVirtualizationEnabled -eq $false) {
                     continue
                 }
                 $L.PSObject.TypeNames.Insert(0,'WAP.LogicalNetwork')
@@ -1220,8 +1337,7 @@ function New-WAPVMNetwork {
         [ValidateNotNullOrEmpty()]
         [String] $Name,
 
-        [Parameter(Mandatory,
-                   ValueFromPipeline)]
+        [Parameter(Mandatory, ValueFromPipeline)]
         [ValidateNotNull()]
         [PSCustomObject] $LogicalNetwork,
 
@@ -1250,7 +1366,6 @@ function New-WAPVMNetwork {
                 Name = $Name
                 StampId = $LogicalNetwork.StampId
                 LogicalNetworkId = $LogicalNetwork.ID
-                CAIPAddressPoolType = 'IPv4'
             }
             
             if ($Description) {
@@ -1293,12 +1408,10 @@ function Remove-WAPVMNetwork {
 
         This will remove the VM Network with name MyNetwork.
     #>
-    [CmdletBinding(SupportsShouldProcess=$true,
-                   ConfirmImpact='High')]
+    [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
     [OutputType([Void])]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipeline)]
+        [Parameter(Mandatory, ValueFromPipeline)]
         [ValidateNotNull()]
         [PSCustomObject] $VMNetwork,
 
@@ -1397,8 +1510,8 @@ function New-WAPVMRoleParameterObject {
         [PSCustomObject] $OSDisk,
 
         [Parameter(Mandatory)]
-        [ValidateSet('Small','A7','ExtraSmall','Large','A6','Medium','ExtraLarge')]
-        [String] $VMRoleVMSize,
+        [ValidateNotNull()]
+        [PSCustomObject] $VMRoleVMSize,
 
         [Parameter(Mandatory)]
         [ValidateNotNull()]
@@ -1414,6 +1527,9 @@ function New-WAPVMRoleParameterObject {
     }
     if (!($VMNetwork.pstypenames.Contains('WAP.VMNetwork'))) {
         throw 'Object bound to VMNetwork parameter is of the wrong type'
+    }
+    if (!($VMRoleVMSize.pstypenames.Contains('WAP.VMRoleSizeProfile'))) {
+        throw 'Object bound to VMRoleVMSize parameter is of the wrong type'
     }
     if ($PSCmdlet.ShouldProcess($null,'Generating new ParameterObject')) {
         $Sections = $VMRole.ViewDef.ViewDefinition.Sections
@@ -1454,7 +1570,7 @@ function New-WAPVMRoleParameterObject {
             } elseif ($P.Type -eq 'OSVirtualHardDisk') {
                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value "$($OSDisk.FamilyName):$($OSDisk.Release)" -Force
             } elseif ($P.Type -eq 'VMSize') {
-                Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $VMRoleVMSize -Force
+                Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $VMRoleVMSize.Name -Force
             } elseif ($P.Type -eq 'Credential') {
                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value 'domain\username:password' -Force
             } elseif ($P.Type -eq 'Network') {
@@ -1494,9 +1610,7 @@ function Get-WAPCloudService {
     [CmdletBinding(DefaultParameterSetName = 'List')]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipelineByPropertyName,
-                   ParameterSetName = 'Name')]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'Name')]
         [Alias('CloudServiceName')]
         [ValidateNotNullOrEmpty()]
         [String] $Name
@@ -1555,8 +1669,7 @@ function New-WAPCloudService {
     [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('CloudServiceName')]
         [ValidateNotNullOrEmpty()]
         [String] $Name
@@ -1629,11 +1742,9 @@ function Remove-WAPCloudService {
         This will remove the cloudservice named test from the subscription. If a VM Role has been deployed to this cloud service, it will be removed as well.
         In this case, the user is not prompted to confirm as -Force is specified.
     #>
-    [CmdletBinding(SupportsShouldProcess=$true,
-                   ConfirmImpact='High')]
+    [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [ValidateNotNullOrEmpty()]
         [String] $Name,
 
@@ -1717,8 +1828,7 @@ function New-WAPVMRoleDeployment {
         [ValidateNotNull()]
         [PSCustomObject] $ParameterObject,
 
-        [Parameter(Mandatory,
-                   ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Name','VMRoleName')]
         [ValidateNotNullOrEmpty()]
         [String] $CloudServiceName
@@ -1829,8 +1939,7 @@ function Get-WAPVMRole {
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Name','VMRoleName')]
         [ValidateNotNullOrEmpty()]
         [String] $CloudServiceName
@@ -1896,8 +2005,7 @@ function Get-WAPVMRoleVM {
     [CmdletBinding(DefaultParameterSetName='List')]
     [OutputType([PSCustomObject])]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Name','VMRoleName')]
         [ValidateNotNullOrEmpty()]
         [String] $CloudServiceName,
@@ -1924,15 +2032,13 @@ function Get-WAPVMRoleVM {
 
             $VMs = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
 
-            if ($VMMEnhanced) {
-                $StampId=(Get-WAPCloud).StampId
-                Write-Verbose -Message "StampId: $StampId"
-            }
+            $StampId=(Get-WAPCloud).StampId
 
             foreach ($V in $VMs.value) {
                 if ($PSCmdlet.ParameterSetName -eq 'ComputerName' -and $V.ComputerName -ne $ComputerName) {
                     continue
                 }
+                Add-Member -InputObject $V -MemberType NoteProperty -Name StampId -Value $StampId
                 Add-Member -InputObject $V -MemberType NoteProperty -Name IPAddress -Value $V.ConnectToAddresses.IPAddress
                 Add-Member -InputObject $V -MemberType NoteProperty -Name NetworkName -Value $V.ConnectToAddresses.NetworkName
                 Add-Member -InputObject $V -MemberType NoteProperty -Name ParentCloudServiceName -Value $CloudServiceName
@@ -1949,6 +2055,193 @@ function Get-WAPVMRoleVM {
                 }
                 $V.PSObject.TypeNames.Insert(0,'WAP.VM')
                 Write-Output -InputObject $V
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Get-WAPVM {
+    <#
+    .SYNOPSIS
+        Retrieves Deployed VM(s).
+
+    .PARAMETER ComputerName
+        When ComputerName is specified, only the VM with the specified ComputerName is returned.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>Get-WAPVM
+
+        This will get the VM information
+    #>
+    [CmdletBinding(DefaultParameterSetName='List')]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(ParameterSetName='ComputerName')]
+        [ValidateNotNullOrEmpty()]
+        [String] $ComputerName
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+
+            $URI = '{0}:{1}/{2}/services/systemcenter/vmm/VirtualMachines()?$expand=VirtualNetworkAdapters,VirtualDVDDrives,VirtualDiskDrives,VirtualHardDisks' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
+            Write-Verbose -Message "Constructed VM URI: $URI"
+
+            $VMs = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
+
+            foreach ($V in $VMs.value) {
+                if ($PSCmdlet.ParameterSetName -eq 'ComputerName' -and $V.ComputerName -ne $ComputerName) {
+                    continue
+                }
+                Add-Member -InputObject $V -MemberType AliasProperty -Name RuntimeState -Value VirtualMachineState
+                $NICs = $V | Select-Object -ExpandProperty virtualnetworkadapters
+                $IPAddress = @()
+                $ConnectToAddresses = @()
+                foreach ($N in $NICs) {
+                    if ($null -ne $N.IPv4Addresses) {
+                        foreach ($IP in $N.IPv4Addresses) {
+                            $IPAddress += $IP
+                            $ConnectToAddresses += [PSCustomObject]@{
+                                IPAddress = $IP
+                                NetworkName = $N.VMNetworkName
+                                Port = '3389'
+                            }
+                        } 
+                    }
+                    if ($null -ne $N.IPv6Addresses) {
+                        foreach ($IP in $N.IPv6Addresses) {
+                            $IPAddress += $IP
+                            $ConnectToAddresses += [PSCustomObject]@{
+                                IPAddress = $IP
+                                NetworkName = $N.VMNetworkName
+                                Port = '3389'
+                            }
+                        }
+                    }
+                }
+                Add-Member -InputObject $V -MemberType NoteProperty -Name IPAddress -Value $IPAddress
+                Add-Member -InputObject $V -MemberType NoteProperty -Name ConnectToAddresses -Value $ConnectToAddresses
+                $V.PSObject.TypeNames.Insert(0,'WAP.VM')
+                Write-Output -InputObject $V
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Start-WAPVM {
+    [CmdletBinding()]
+    [OutputType([void])]
+    param (
+        [Parameter(Mandatory,
+                   ValueFromPipeline)]
+        [ValidateNotNull()]
+        [PSCustomObject] $VM
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            # VMRoleVM and normal VM now have same typename but need different URL
+            if (!($VM.pstypenames.Contains('WAP.VM'))) {
+                throw 'Object bound to VM parameter is of the wrong type'
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+
+            $Body = @{
+                Operation = 'Start'
+            } | ConvertTo-Json
+
+            $URI = '{0}:{1}/{2}/services/systemcenter/vmm/VirtualMachines(ID=guid''{3}'',StampId=guid''{4}'')' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$VM.ID,$VM.StampId
+            Write-Verbose -Message "Constructed VM Start URI: $URI"
+
+            Invoke-RestMethod -Uri $URI -Headers $Headers -Method Put -Body $Body -ContentType application/json | Out-Null
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Stop-WAPVM {
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact='High')]
+    [OutputType([void])]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [ValidateNotNull()]
+        [PSCustomObject] $VM,
+
+        [Switch] $RunAsynchronously,
+
+        [Switch] $TurnOff,
+
+        [Switch] $Force
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            if (!($VM.pstypenames.Contains('WAP.VM'))) {
+                throw 'Object bound to VM parameter is of the wrong type'
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+
+            if ($TurnOff) {
+                $operation = 'Stop'
+            } else {
+                $operation = 'Shutdown'
+            }
+
+            $Body = @{
+                Operation = $operation
+            } | ConvertTo-Json
+            
+            $URI = '{0}:{1}/{2}/services/systemcenter/vmm/VirtualMachines(ID=guid''{3}'',StampId=guid''{4}'')' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$VM.ID,$VM.StampId
+            if ($RunAsynchronously) {
+                $URI = $URI + '?RunAsynchronously=1'
+            }
+
+            Write-Verbose -Message "Constructed VM Start URI: $URI"
+            if ($Force -or $PSCmdlet.ShouldProcess($VM.ComputerName)) {
+                Invoke-RestMethod -Uri $URI -Headers $Headers -Method Put -Body $Body -ContentType application/json | Out-Null
             }
         } catch {
             Write-Error -ErrorRecord $_
@@ -2036,8 +2329,7 @@ function Connect-WAPVMRDP {
     [CmdletBinding()]
     [OutputType([void],[System.String])]
     param (
-        [Parameter(Mandatory,
-                   ValueFromPipeline)]
+        [Parameter(Mandatory, ValueFromPipeline)]
         [ValidateNotNull()]
         [PSCustomObject] $VM,
 
@@ -2074,6 +2366,47 @@ function Connect-WAPVMRDP {
             Write-Error -ErrorRecord $_
         }
     }
+}
+
+function Get-WAPVMRoleVMSize {
+    [OutputType([PSCustomObject])]
+    [CmdletBinding(DefaultParameterSetName = 'List')]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName, ParameterSetName = 'Name')]
+        [ValidateNotNullOrEmpty()]
+        [String] $Name
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+            
+            $URI = '{0}:{1}/{2}/services/systemcenter/vmm/VMRoleSizeProfiles' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
+            Write-Verbose -Message "Constructed VMRoleSizeProfiles URI: $URI"
+            $Profiles = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
+
+            foreach ($P in $Profiles.value) {
+                if ($PSCmdlet.ParameterSetName -eq 'Name' -and $P.Name -ne $Name) {
+                    continue
+                }
+                $P.PSObject.TypeNames.Insert(0,'WAP.VMRoleSizeProfile')
+                Write-Output -InputObject $P
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+    
 }
 
 Export-ModuleMember -Function *-WAP*

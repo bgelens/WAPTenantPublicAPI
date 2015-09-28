@@ -414,7 +414,7 @@ function Get-WAPSubscription {
     try {
         if ($Current) {
             Write-Output -InputObject $Subscription
-            break
+            return
         }
 
         if ($IgnoreSSL) {

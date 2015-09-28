@@ -26,6 +26,8 @@ Grant Execute On Object::mp.GetInvalidatedUserTokens to mp_TenantAPI
 Get-WAPToken is capable to get the token from both the tenant auth site which comes with and is preconfigured with WAP by default and ADFS.
 The function is based on the example WAP functions found in the Admin-API install directory.
 
+Both Tenant and Admin should have the same relying party settings configured.
+
 Examples
 --------
 ```powershell

@@ -12,7 +12,7 @@
 RootModule = 'WapTenantPublicAPI'
 
 # Version number of this module.
-ModuleVersion = '0.0.4.2'
+ModuleVersion = '0.0.5.0'
 
 # ID used to uniquely identify this module
 GUID = 'eaa28acf-4a1e-4d0e-96dd-fa36de33a658'
@@ -27,7 +27,7 @@ CompanyName = 'Unknown'
 Copyright = '(c) 2015 Ben Gelens. All rights reserved.'
 
 # Description of the functionality provided by this module
-Description = 'Windows Azure Pack - Easily deploy VM Roles / Cloud Services by interacting with the Tenant Public API'
+Description = 'Windows Azure Pack - Easily deploy VM Roles / Cloud Services / SQL Databases / Virtual Networks by interacting with the Tenant Public API'
 
 # Minimum version of the Windows PowerShell engine required by this module
 PowerShellVersion = '4.0'

@@ -9,6 +9,7 @@ $IgnoreSSL = $false
 $Token = $null
 $Headers = $null
 $Subscription = $null
+$SQLOffer = $null
 $OriginalCertificatePolicy = [System.Net.ServicePointManager]::CertificatePolicy
 
 function IgnoreSSL {
@@ -82,7 +83,9 @@ function PreFlight {
     param (
         [Switch] $IncludeConnection,
 
-        [Switch] $IncludeSubscription
+        [Switch] $IncludeSubscription,
+
+        [Switch] $IncludeSQLOffer
     )
 
     Write-Verbose -Message 'Validating Token Acquired'
@@ -106,6 +109,13 @@ function PreFlight {
         Write-Verbose -Message 'Validating if subscription is selected'
         if ($null -eq $Subscription) {
             throw 'No Subscription has been selected yet, run Select-WAPSubscription first!'
+        }
+    }
+
+    if ($IncludeSQLOffer) {
+        Write-Verbose -Message 'Validating if SQL Offer is selected'
+        if ($null -eq $SQLOffer) {
+            throw 'No SQL Offer has been selected yet, run Select-WAPSQLOffer first!'
         }
     }
 }
@@ -201,7 +211,10 @@ function Get-WAPToken {
         [String] $ForOnBehalfOfUser,
 
         [Parameter(ParameterSetName='UpdateForOnBehalfOfUser')]
-        [Switch] $UpdateForOnBehalfOfUserOnly
+        [Switch] $UpdateForOnBehalfOfUserOnly,
+
+        [Parameter(ParameterSetName='Admin')]
+        [Switch] $AdminWindowsAuth
     )
 
     try {
@@ -240,20 +253,34 @@ function Get-WAPToken {
         if ($ADFS) {
             Write-Verbose -Message 'Constructing ADFS URL'
             $ConstructedURL = $URL + ":$Port" + '/adfs/services/trust/13/usernamemixed'
+            $MessageClientCredentialType = 'UserName'
+            $TransportClientCredentialType = 'None'
+            $identityProviderEndpoint = New-Object -TypeName System.ServiceModel.EndpointAddress -ArgumentList $ConstructedURL
+            $identityProviderBinding = New-Object -TypeName System.ServiceModel.WS2007HttpBinding -ArgumentList ([System.ServiceModel.SecurityMode]::TransportWithMessageCredential)
+        } elseif ($AdminWindowsAuth) {
+            $ConstructedURL = $URL + ":$Port" +  '/wstrust/issue/windowstransport'
+            $MessageClientCredentialType = 'None'
+            $TransportClientCredentialType = 'Windows'
+            $identityProviderEndpoint = New-Object -TypeName System.ServiceModel.EndpointAddress -ArgumentList $ConstructedURL
+            $identityProviderBinding = New-Object -TypeName System.ServiceModel.WS2007HttpBinding -ArgumentList ([System.ServiceModel.SecurityMode]::Transport)
         } else {
             Write-Verbose -Message 'Constructing ASPNet URL'
             $ConstructedURL = $URL + ":$Port" + '/wstrust/issue/usernamemixed'
+            $MessageClientCredentialType = 'UserName'
+            $TransportClientCredentialType = 'None'
+            $identityProviderEndpoint = New-Object -TypeName System.ServiceModel.EndpointAddress -ArgumentList $ConstructedURL
+            $identityProviderBinding = New-Object -TypeName System.ServiceModel.WS2007HttpBinding -ArgumentList ([System.ServiceModel.SecurityMode]::TransportWithMessageCredential)
         }
         Write-Verbose -Message $ConstructedURL
-        $identityProviderEndpoint = New-Object -TypeName System.ServiceModel.EndpointAddress -ArgumentList $ConstructedURL
-        $identityProviderBinding = New-Object -TypeName System.ServiceModel.WS2007HttpBinding -ArgumentList ([System.ServiceModel.SecurityMode]::TransportWithMessageCredential)
+        #$identityProviderEndpoint = New-Object -TypeName System.ServiceModel.EndpointAddress -ArgumentList $ConstructedURL
+        #$identityProviderBinding = New-Object -TypeName System.ServiceModel.WS2007HttpBinding -ArgumentList ([System.ServiceModel.SecurityMode]::TransportWithMessageCredential)
         $identityProviderBinding.Security.Message.EstablishSecurityContext = $false
-        $identityProviderBinding.Security.Message.ClientCredentialType = 'UserName'
-        $identityProviderBinding.Security.Transport.ClientCredentialType = 'None'
- 
+        $identityProviderBinding.Security.Message.ClientCredentialType = $MessageClientCredentialType
+        $identityProviderBinding.Security.Transport.ClientCredentialType = $TransportClientCredentialType
+
         $trustChannelFactory = New-Object -TypeName System.ServiceModel.Security.WSTrustChannelFactory -ArgumentList $identityProviderBinding, $identityProviderEndpoint
         $trustChannelFactory.TrustVersion = [System.ServiceModel.Security.TrustVersion]::WSTrust13
- 
+
         if ($IgnoreSSL) {
             Write-Warning -Message 'IgnoreSSL switch defined. Certificate errors will be ignored!'
             $certificateAuthentication = New-Object -TypeName System.ServiceModel.Security.X509ServiceCertificateAuthentication
@@ -275,10 +302,10 @@ function Get-WAPToken {
         $rst.KeyType = [System.IdentityModel.Protocols.WSTrust.KeyTypes]::Bearer
 
         $rstr = New-Object -TypeName System.IdentityModel.Protocols.WSTrust.RequestSecurityTokenResponse
- 
+
         $channel = $trustChannelFactory.CreateChannel()
         $token = $channel.Issue($rst, [ref] $rstr)
- 
+
         $tokenString = ([System.IdentityModel.Tokens.GenericXmlSecurityToken]$token).TokenXml.InnerText;
         $token = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($tokenString))
 
@@ -414,7 +441,7 @@ function Get-WAPSubscription {
     try {
         if ($Current) {
             Write-Output -InputObject $Subscription
-            return
+            break
         }
 
         if ($IgnoreSSL) {
@@ -487,6 +514,26 @@ function Select-WAPSubscription {
     } catch {
         Write-Error -ErrorRecord $_
     }
+}
+
+function GetWAPSubscriptionQuota {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateSet('systemcenter','sqlservers')]
+        [String] $Servicetype = 'sqlservers'
+    )
+    if ($Servicetype -eq 'systemcenter') {
+        throw 'systemcenter type currently not supported'
+    }
+    if ($Servicetype -eq 'sqlservers') {
+        PreFlight -IncludeConnection -IncludeSubscription -IncludeSQLOffer
+        $BaseQuota = (Get-WAPSubscription -Id $Subscription.SubscriptionID | Select-Object -ExpandProperty Services | ?{$_.Type -eq $Servicetype}).BaseQuotaSettings
+        foreach ($B in $BaseQuota.value) {
+            $B | ConvertFrom-Json
+        }
+    }
+    
 }
 
 function Get-WAPGalleryVMRole {
@@ -2409,5 +2456,404 @@ function Get-WAPVMRoleVMSize {
     
 }
 
+function Get-WAPSQLDatabase {
+    [OutputType([PSCustomObject])]
+    [CmdletBinding(DefaultParameterSetName = 'List')]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName, ParameterSetName = 'Name')]
+        [ValidateNotNullOrEmpty()]
+        [String] $Name
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+            
+            $URI = '{0}:{1}/{2}/services/sqlservers/databases' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
+            Write-Verbose -Message "Constructed SQL Database URI: $URI"
+            $Databases = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
+            foreach ($D in $Databases) {
+                if ($PSCmdlet.ParameterSetName -eq 'Name' -and $D.Name -ne $Name) {
+                    continue
+                }
+                $D.PSObject.TypeNames.Insert(0,'WAP.SQLDatabase')
+                Write-Output -InputObject $D
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+    
+}
+
+function Get-WAPSQLOffer {
+    [OutputType([PSCustomObject])]
+    [CmdletBinding(DefaultParameterSetName = 'List')]
+    param (
+        [Parameter(Mandatory, ParameterSetName='Named',ValueFromPipeline,ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [String] $Name,
+
+        [Switch] $Current
+    )
+    process {
+        try {
+            if ($Current) {
+                Write-Output -InputObject $SQLOffer
+                break
+            }
+
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+
+            $URI = '{0}:{1}/{2}/services/sqlservers' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
+            Write-Verbose -Message "Constructed SQL Offer URI: $URI"
+
+            $Offers = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
+            foreach ($O in $Offers.QuotaSettings.Value) {
+                $Obj = $O | ConvertFrom-Json
+                if ($PSCmdlet.ParameterSetName -eq 'Named' -and $Obj.displayName -ne $Name) {
+                    continue
+                }
+                $OutputObj = $Obj | Add-Member -MemberType AliasProperty -Name Edition -Value displayName -PassThru
+                $OutputObj.PSObject.TypeNames.Insert(0,'WAP.SQLOffer')
+                Write-Output -InputObject $OutputObj
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+    
+}
+
+function Select-WAPSQLOffer {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [ValidateNotNull()]
+        [PSCustomObject] $Offer
+    )
+    try {
+        if ($input.count -gt 1) {
+            throw 'Only 1 Offer can be selected. If passed from Get-WAPSQLOffer, make sure only 1 offer object is passed on the pipeline'
+        }
+
+        if (!($Offer.pstypenames.Contains('WAP.SQLOffer'))) {
+            throw 'Object bound to Offer parameter is of the wrong type'
+        }
+        Write-Verbose -Message "Setting current Offer to $($Offer | Out-String)"
+        Set-Variable -Name SQLOffer -Value $Offer -Scope 1
+    } catch {
+        Write-Error -ErrorRecord $_
+    }
+}
+
+function Test-WAPSQLDatabaseNameAvailable {
+    [OutputType([Bool])]
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [String] $Name
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription -IncludeSQLOffer
+
+            $URI = '{0}:{1}/{2}/services/sqlservers/databases?Validate=True' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
+            Write-Verbose -Message "Constructed SQL Database URI: $URI"
+
+            $DBCheck = @{
+                Name = $Name
+                SubscriptionId = $null
+                BaseSizeMB = 0
+                MaxSizeMB = 0
+                Edition = $null
+                Collation = $null
+                IsContained = $null
+            } | ConvertTo-Json -Compress
+
+            Write-Verbose -Message "Constructed Body: $($DBCheck | Out-String)"
+
+            $Test = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Post -Body $DBCheck -ContentType 'application/json'
+            if ($Test) {
+                Write-Output -InputObject $true
+            }
+        } catch {
+            Write-Error -ErrorRecord $_ -ErrorAction Continue
+            Write-Output -InputObject $false
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function New-WAPSQLDatabase {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [String] $Name,
+
+        [Parameter(Mandatory, ParameterSetName='SQLAuth')]
+        [PSCredential] 
+        [System.Management.Automation.CredentialAttribute()] $Credential,
+
+        [ValidateSet('SQL_Latin1_General_CP1_CI_AS','Latin1_General_CI_AI','Latin1_General_CI_AS','Latin1_General_CS_AI')]
+        [String] $Collation = 'SQL_Latin1_General_CP1_CI_AS',
+
+        [Parameter(ParameterSetName='WindowsAuth')]
+        [Switch] $WindowsAuthentication,
+
+        [Parameter(ParameterSetName='WindowsAuth')]
+        [ValidateNotNullOrEmpty()]
+        [String] $WindowsAccount
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription -IncludeSQLOffer
+
+            $URI = '{0}:{1}/{2}/services/sqlservers/databases' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
+            Write-Verbose -Message "Constructed SQL Database URI: $URI"
+
+            $Quota = GetWAPSubscriptionQuota -Servicetype sqlservers
+
+            $DBConfig = @{
+                Name = $Name
+                BaseSizeMB = $Quota.resourceSize
+                MaxSizeMB = $Quota.resourceSize
+                Edition = $SQLOffer.Edition
+                Collation = $Collation
+                SubscriptionId = $Subscription.SubscriptionID
+                IsContained = $true
+            } 
+            if ($WindowsAuthentication) {
+                # // TODO: Builtin check if Windows auth is supported Edition: supportedAuthenticationModes = 3 (quota has this value)
+                $DBConfig.Add('AuthenticationMode','Windows')
+                $DBConfig.Add('AdminLogon',$WindowsAccount)
+            } else {
+                $DBConfig.Add('Password', $Credential.GetNetworkCredential().Password)
+                $DBConfig.Add('AdminLogon', $Credential.UserName)
+            }
+            $DBConfig = $DBConfig | ConvertTo-Json -Compress
+
+            Write-Verbose -Message "Constructed Body: $($DBConfig | Out-String)"
+
+            if ($PSCmdlet.ShouldProcess($Name)) {
+                $DB = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Post -Body $DBConfig -ContentType 'application/json'
+                $DB.PSObject.TypeNames.Insert(0,'WAP.SQLDatabase')
+                Write-Output -InputObject $DB
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Reset-WAPSQLDatabaseAdmin {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [PSCustomObject] $Database,
+
+        [PSCredential] 
+        [System.Management.Automation.CredentialAttribute()] $Credential
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription -IncludeSQLOffer
+            
+            if ($Database.AuthenticationMode -eq 1) {
+                throw "Database authentication for $($Database.Name) is of type Windows and cannot be reset"
+            }
+
+            $URI = '{0}:{1}/{2}/services/sqlservers/databases/{3}' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$Database.Name
+            Write-Verbose -Message "Constructed SQL Database URI: $URI"
+
+            if (-not $Credential) {
+                Get-Credential -UserName $Database.AdminLogon -Message 'Reset your password'
+            }
+
+            $DBConfig = @{
+                Name = $Database.Name
+                BaseSizeMB = $Database.BaseSizeMB
+                MaxSizeMB = $Database.MaxSizeMB
+                Edition = $null
+                Collation = $null
+                SubscriptionId = $Subscription.SubscriptionID
+                IsContained = $null
+                AdminLogon = $Database.AdminLogon
+                Password = $Credential.GetNetworkCredential().Password
+            } | ConvertTo-Json -Compress
+
+            Write-Verbose -Message "Constructed Body: $($DBConfig | Out-String)"
+
+            if ($PSCmdlet.ShouldProcess($Database.Name)) {
+                $DB = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Put -Body $DBConfig -ContentType 'application/json'
+                $DB.PSObject.TypeNames.Insert(0,'WAP.SQLDatabase')
+                Write-Output -InputObject $DB
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Resize-WAPSQLDatabase {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [PSCustomObject] $Database,
+
+        #Dynamic param?
+        [Parameter(Mandatory)]
+        [uint16] $SizeMB
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+            if (!($Database.pstypenames.Contains('WAP.SQLDatabase'))) {
+                throw 'Object bound to Database parameter is of the wrong type'
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription -IncludeSQLOffer
+            
+            $Quota = GetWAPSubscriptionQuota -Servicetype sqlservers
+
+            if ($SizeMB -lt $Quota.resourceSize -or $SizeMB -gt $SQLOffer.resourceSizeLimit) {
+                throw "Specify a size between $($Quota.resourceSize) and $($SQLOffer.resourceSizeLimit)"
+            }
+
+            if ($PSCmdlet.ShouldProcess($Database.Name)) {
+                $URI = '{0}:{1}/{2}/services/sqlservers/databases/{3}' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$Database.Name
+                Write-Verbose -Message "Constructed SQL Database URI: $URI"
+
+                $DBConfig = @{
+                    Name = $Database.Name
+                    BaseSizeMB = $Database.BaseSizeMB
+                    MaxSizeMB = $SizeMB
+                    Edition = $null
+                    AdminLogon = $null
+                    Collation = $null
+                    Password = $null
+                    SubscriptionId = $Subscription.SubscriptionID
+                    IsContained = $null
+                } | ConvertTo-Json -Compress
+
+                Write-Verbose -Message "Constructed Body: $($DBConfig | Out-String)"
+
+                $DB = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Put -Body $DBConfig -ContentType 'application/json'
+                $DB.PSObject.TypeNames.Insert(0,'WAP.SQLDatabase')
+                Write-Output -InputObject $DB
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Remove-WAPSQLDatabase {
+    [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [ValidateNotNullOrEmpty()]
+        [PSCustomobject] $Database,
+
+        [Switch] $Force
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+            if (!($Database.pstypenames.Contains('WAP.SQLDatabase'))) {
+               throw 'Object bound to Database parameter is of the wrong type'
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription -IncludeSQLOffer
+
+            $URI = '{0}:{1}/{2}/services/sqlservers/databases/{3}' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$Database.Name
+            Write-Verbose -Message "Constructed Database URI: $URI"
+
+            if ($Force -or $PSCmdlet.ShouldProcess($Database.Name)) {
+                Invoke-RestMethod -Uri $URI -Headers $Headers -Method Delete
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
 Export-ModuleMember -Function *-WAP*
-Export-ModuleMember -Variable Token,Headers,PublicTenantAPIUrl,Port,IgnoreSSL,Subscription
+Export-ModuleMember -Variable Token,Headers,PublicTenantAPIUrl,Port,IgnoreSSL,Subscription 
+

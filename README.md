@@ -1,7 +1,7 @@
 WapTenantPublicAPI
 ------------------
 
-A PowerShell module which enables you to deploy VM Roles through the Windows Azure Pack Tenant API and Tenant Public API.
+A PowerShell module which enables you to deploy VM Roles, Virtual Networks and SQL Databases through the Windows Azure Pack Tenant API and Tenant Public API.
 
 Requirements
 ------------
@@ -31,6 +31,19 @@ Both Tenant and Admin should have the same relying party settings configured.
 Examples
 --------
 ```powershell
+#example DBaaS
+Get-WAPToken -URL https://sts.bgelens.nl -ADFS -Credential administrator@gelens.int
+Connect-WAPAPI -Url https://api.bgelens.nl -Port 443
+Get-WAPSubscription -Name Test | Select-WAPSubscription
+Get-WAPSQLOffer -Name 'MySQLEditions' | Select-WAPSQLOffer
+Test-WAPSQLDatabaseNameAvailable -Name 'MyNewDBName'
+New-WAPSQLDatabase -Name 'MyNewDBName' -Credential AdminBen #SQL Auth
+New-WAPSQLDatabase -Name 'MyNewDBName' -WindowsAuthentication -WindowsAccount 'Domain\username' #Windows Auth
+Get-WAPSQLDatabase -Name 'MyNewDBName'
+Get-WAPSQLDatabase -Name 'MyNewDBName' | Reset-WAPSQLDatabaseAdmin #Reset SQL User Password
+Get-WAPSQLDatabase -Name 'MyNewDBName' | Resize-WAPSQLDatabase -SizeMB 2048
+Get-WAPSQLDatabase -Name 'MyNewDBName' | Remove-WAPSQLDatabase
+
 #example deployment 1 via Tenant Public API
 Get-WAPToken -URL https://sts.bgelens.nl -ADFS -Credential administrator@gelens.int
 Connect-WAPAPI -Url https://api.bgelens.nl -Port 443

@@ -12,7 +12,7 @@
 RootModule = 'WapTenantPublicAPI'
 
 # Version number of this module.
-ModuleVersion = '0.0.5.1'
+ModuleVersion = '0.0.5.2'
 
 # ID used to uniquely identify this module
 GUID = 'eaa28acf-4a1e-4d0e-96dd-fa36de33a658'
@@ -92,7 +92,7 @@ PrivateData = @{
     PSData = @{
 
         # Tags applied to this module. These help with module discovery in online galleries.
-        # Tags = @()
+        Tags = @('WAPack','VMRole','AzurePack','PSModule','DBaaS')
 
         # A URL to the license for this module.
         LicenseUri = 'https://github.com/bgelens/WAPTenantPublicAPI/blob/master/LICENSE'

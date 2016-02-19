@@ -528,9 +528,9 @@ function GetWAPSubscriptionQuota {
     }
     if ($Servicetype -eq 'sqlservers') {
         PreFlight -IncludeConnection -IncludeSubscription -IncludeSQLOffer
-        $BaseQuota = (Get-WAPSubscription -Id $Subscription.SubscriptionID | Select-Object -ExpandProperty Services | ?{$_.Type -eq $Servicetype}).BaseQuotaSettings
-        foreach ($B in $BaseQuota.value) {
-            $B | ConvertFrom-Json
+        $BaseQuota = (Get-WAPSubscription -Id $Subscription.SubscriptionID | Select-Object -ExpandProperty Services | ?{$_.Type -eq $Servicetype}).BaseQuotaSettings.Value | ConvertFrom-Json
+        foreach ($B in $BaseQuota) {
+            $B
         }
     }
     
@@ -2472,12 +2472,15 @@ function Get-WAPSQLDatabase {
                 IgnoreSSL
             }
 
-            PreFlight -IncludeConnection -IncludeSubscription
+            PreFlight -IncludeConnection -IncludeSubscription -IncludeSQLOffer
             
             $URI = '{0}:{1}/{2}/services/sqlservers/databases' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
             Write-Verbose -Message "Constructed SQL Database URI: $URI"
             $Databases = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
             foreach ($D in $Databases) {
+                if ($D.Edition -ne $SQLOffer.Edition) {
+                    continue
+                }
                 if ($PSCmdlet.ParameterSetName -eq 'Name' -and $D.Name -ne $Name) {
                     continue
                 }
@@ -2524,15 +2527,15 @@ function Get-WAPSQLOffer {
             $URI = '{0}:{1}/{2}/services/sqlservers' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
             Write-Verbose -Message "Constructed SQL Offer URI: $URI"
 
-            $Offers = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
-            foreach ($O in $Offers.QuotaSettings.Value) {
-                $Obj = $O | ConvertFrom-Json
-                if ($PSCmdlet.ParameterSetName -eq 'Named' -and $Obj.displayName -ne $Name) {
+            $Offers = (Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get).QuotaSettings.value | ConvertFrom-Json
+            foreach ($O in $Offers) {
+                Write-Verbose -Message "Processing: $O"
+                if ($PSCmdlet.ParameterSetName -eq 'Named' -and $O.displayName -ne $Name) {
                     continue
                 }
-                $OutputObj = $Obj | Add-Member -MemberType AliasProperty -Name Edition -Value displayName -PassThru
-                $OutputObj.PSObject.TypeNames.Insert(0,'WAP.SQLOffer')
-                Write-Output -InputObject $OutputObj
+                $O = $O | Add-Member -MemberType AliasProperty -Name Edition -Value displayName -PassThru
+                $O.PSObject.TypeNames.Insert(0,'WAP.SQLOffer')
+                Write-Output -InputObject $O
             }
         } catch {
             Write-Error -ErrorRecord $_
@@ -2652,7 +2655,7 @@ function New-WAPSQLDatabase {
             $URI = '{0}:{1}/{2}/services/sqlservers/databases' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
             Write-Verbose -Message "Constructed SQL Database URI: $URI"
 
-            $Quota = GetWAPSubscriptionQuota -Servicetype sqlservers
+            $Quota = GetWAPSubscriptionQuota -Servicetype sqlservers | ?{$_.groupName -eq $SQLOffer.groupName}
 
             $DBConfig = @{
                 Name = $Name
@@ -2664,9 +2667,12 @@ function New-WAPSQLDatabase {
                 IsContained = $true
             } 
             if ($WindowsAuthentication) {
-                # // TODO: Builtin check if Windows auth is supported Edition: supportedAuthenticationModes = 3 (quota has this value)
-                $DBConfig.Add('AuthenticationMode','Windows')
-                $DBConfig.Add('AdminLogon',$WindowsAccount)
+                if ($Quota.supportedAuthenticationModes -eq 3) {
+                    $DBConfig.Add('AuthenticationMode','Windows')
+                    $DBConfig.Add('AdminLogon',$WindowsAccount)
+                } else {
+                    throw "SQL Offer $($SQLOffer.Edition) does not support Windows Authentication"
+                }
             } else {
                 $DBConfig.Add('Password', $Credential.GetNetworkCredential().Password)
                 $DBConfig.Add('AdminLogon', $Credential.UserName)
@@ -2776,10 +2782,12 @@ function Resize-WAPSQLDatabase {
 
             PreFlight -IncludeConnection -IncludeSubscription -IncludeSQLOffer
             
-            $Quota = GetWAPSubscriptionQuota -Servicetype sqlservers
-
-            if ($SizeMB -lt $Quota.resourceSize -or $SizeMB -gt $SQLOffer.resourceSizeLimit) {
-                throw "Specify a size between $($Quota.resourceSize) and $($SQLOffer.resourceSizeLimit)"
+            if ($SizeMB -lt $Database.BaseSizeMB) {
+                throw "Value specified $SizeMB is less then the minimum size of the database $($Database.BaseSizeMB)"
+            }
+            
+            if ($SizeMB -gt $Database.Quota) {
+                throw "Value specified $SizeMB is greater then the maximum size of the database $($Database.Quota)"
             }
 
             if ($PSCmdlet.ShouldProcess($Database.Name)) {
@@ -2832,7 +2840,7 @@ function Remove-WAPSQLDatabase {
                 IgnoreSSL
             }
             if (!($Database.pstypenames.Contains('WAP.SQLDatabase'))) {
-               throw 'Object bound to Database parameter is of the wrong type'
+                throw 'Object bound to Database parameter is of the wrong type'
             }
 
             PreFlight -IncludeConnection -IncludeSubscription -IncludeSQLOffer

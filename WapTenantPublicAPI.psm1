@@ -2719,7 +2719,7 @@ function Reset-WAPSQLDatabaseAdmin {
             Write-Verbose -Message "Constructed SQL Database URI: $URI"
 
             if (-not $Credential) {
-                Get-Credential -UserName $Database.AdminLogon -Message 'Reset your password'
+                $Credential = Get-Credential -UserName $Database.AdminLogon -Message 'Reset your password'
             }
 
             $DBConfig = @{

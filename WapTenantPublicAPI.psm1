@@ -528,7 +528,7 @@ function GetWAPSubscriptionQuota {
     }
     if ($Servicetype -eq 'sqlservers') {
         PreFlight -IncludeConnection -IncludeSubscription -IncludeSQLOffer
-        $BaseQuota = (Get-WAPSubscription -Id $Subscription.SubscriptionID | Select-Object -ExpandProperty Services | ?{$_.Type -eq $Servicetype}).BaseQuotaSettings.Value | ConvertFrom-Json
+        $BaseQuota = (Get-WAPSubscription -Id $Subscription.SubscriptionID | Select-Object -ExpandProperty Services | Where-Object -FilterScript {$_.Type -eq $Servicetype}).BaseQuotaSettings.Value | ConvertFrom-Json
         foreach ($B in $BaseQuota) {
             $B
         }
@@ -1456,7 +1456,7 @@ function Grant-WAPVMNetworkAccess {
         PS C:\>Connect-WAPAPI -URL $URL
         PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
         PS C:\>$vnet = Get-WAPVMNetwork -Name MyNetwork
-        PS C:\>$vnet | Grant-WAPVMNetworkAccess -GrantToList 'b.gelens@mydomain.local_87153e0d-450b-447c-8916-f51fa49b41d6'
+        PS C:\>$vnet | Grant-WAPVMNetworkAccess -GrantTo 'b.gelens@mydomain.local_87153e0d-450b-447c-8916-f51fa49b41d6'
     #>
     [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([Void])]
@@ -2317,7 +2317,7 @@ function Start-WAPVM {
 }
 
 function Stop-WAPVM {
-    [CmdletBinding(SupportsShouldProcess, ConfirmImpact='High')]
+    [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
     [OutputType([void])]
     param (
         [Parameter(Mandatory, ValueFromPipeline)]
@@ -2728,7 +2728,7 @@ function New-WAPSQLDatabase {
             $URI = '{0}:{1}/{2}/services/sqlservers/databases' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId
             Write-Verbose -Message "Constructed SQL Database URI: $URI"
 
-            $Quota = GetWAPSubscriptionQuota -Servicetype sqlservers | ?{$_.groupName -eq $SQLOffer.groupName}
+            $Quota = GetWAPSubscriptionQuota -Servicetype sqlservers | Where-Object -FilterScript {$_.groupName -eq $SQLOffer.groupName}
 
             $DBConfig = @{
                 Name = $Name

@@ -12,7 +12,7 @@
 RootModule = 'WapTenantPublicAPI'
 
 # Version number of this module.
-ModuleVersion = '0.0.5.4'
+ModuleVersion = '0.0.5.5'
 
 # ID used to uniquely identify this module
 GUID = 'eaa28acf-4a1e-4d0e-96dd-fa36de33a658'
@@ -66,16 +66,59 @@ FormatsToProcess = @('WapTenantPublicAPI.format.ps1xml')
 # NestedModules = @()
 
 # Functions to export from this module
-FunctionsToExport = '*'
+FunctionsToExport = @(
+    'Connect-WAPAPI',
+    'Connect-WAPVMRDP',
+    'Get-WAPCloud',
+    'Get-WAPCloudService',
+    'Get-WAPGalleryVMRole',
+    'Get-WAPLogicalNetwork',
+    'Get-WAPSQLDatabase',
+    'Get-WAPSQLOffer',
+    'Get-WAPSubscription',
+    'Get-WAPToken',
+    'Get-WAPVM',
+    'Get-WAPVMNetwork',
+    'Get-WAPVMNetworkSubnet',
+    'Get-WAPVMNetworkSubnetIPPool',
+    'Get-WAPVMRole',
+    'Get-WAPVMRoleOSDisk',
+    'Get-WAPVMRoleVM',
+    'Get-WAPVMRoleVMSize',
+    'Grant-WAPVMNetworkAccess',
+    'New-WAPCloudService',
+    'New-WAPSQLDatabase',
+    'New-WAPVMNetwork',
+    'New-WAPVMNetworkSubnet',
+    'New-WAPVMNetworkSubnetIPPool',
+    'New-WAPVMRoleDeployment',
+    'New-WAPVMRoleParameterObject',
+    'Remove-WAPCloudService',
+    'Remove-WAPSQLDatabase',
+    'Remove-WAPVMNetwork',
+    'Remove-WAPVMNetworkSubnet',
+    'Remove-WAPVMNetworkSubnetIPPool',
+    'Reset-WAPSQLDatabaseAdmin',
+    'Resize-WAPSQLDatabase',
+    'Select-WAPSQLOffer',
+    'Select-WAPSubscription',
+    'Set-WAPVMNetworkSubnetIPPool',
+    'Start-WAPVM',
+    'Stop-WAPVM',
+    'Test-WAPSQLDatabaseNameAvailable'
+)
 
 # Cmdlets to export from this module
-CmdletsToExport = '*'
+# CmdletsToExport = '*'
 
 # Variables to export from this module
-VariablesToExport = '*'
+VariablesToExport = @(
+    'Token',
+    'Headers'
+)
 
 # Aliases to export from this module
-AliasesToExport = '*'
+# AliasesToExport = '*'
 
 # DSC resources to export from this module
 # DscResourcesToExport = @()

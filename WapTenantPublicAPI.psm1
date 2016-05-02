@@ -832,6 +832,7 @@ function Set-WAPVMNetworkSubnetIPPool {
 
     .PARAMETER DNSSuffix
         Configures the DNS suffix of the IPPool.
+        Specify ([string]::empty) when you want to clear the DNS suffix from the IPPool.
 
     .PARAMETER DNSSearchSuffixes
         Configures the DNS Search Suffixes for the IPPool.
@@ -876,7 +877,7 @@ function Set-WAPVMNetworkSubnetIPPool {
 
         [String[]] $DNSServers,
         
-        [ValidateNotNullOrEmpty()]
+        [ValidateNotNull()]
         [String] $DNSSuffix,
 
         [String[]] $DNSSearchSuffixes,

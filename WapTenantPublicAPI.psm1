@@ -1437,6 +1437,78 @@ function New-WAPVMNetwork {
     }
 }
 
+function Grant-WAPVMNetworkAccess {
+    <#
+    .SYNOPSIS
+        Grants VM Network access to other subscriptions.
+
+    .PARAMETER VMNetwork
+        VM Network object to grant access to. Acquired via Get-WAPVMNetwork.
+
+    .PARAMETER GrantTo
+        UserRole ID to to assign and share your network with.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>$vnet = Get-WAPVMNetwork -Name MyNetwork
+        PS C:\>$vnet | Grant-WAPVMNetworkAccess -GrantToList 'b.gelens@mydomain.local_87153e0d-450b-447c-8916-f51fa49b41d6'
+    #>
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    [OutputType([Void])]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [ValidateNotNull()]
+        [PSCustomObject] $VMNetwork,
+
+        [Parameter(Mandatory)]
+        [String] $GrantTo
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            if (!($VMNetwork.pstypenames.Contains('WAP.VMNetwork'))) {
+                throw 'Object bound to LogicalNetwork parameter is of the wrong type'
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+            $Body = @{
+                ID = $VMNetwork.ID
+                StampId = $VMNetwork.StampId
+                "GrantedToList@odata.type" = "Collection(VMM.UserAndRole)"
+                GrantedToList = @(
+                    @{
+                        RoleName = $GrantTo
+                    }
+                )
+            } | ConvertTo-Json
+            Write-Verbose -Message "Sending Body: $($Body | Out-String)"
+            $GrantURI = '{0}:{1}/{2}/services/systemcenter/vmm/VMNetworks(ID=guid''{3}'',StampId=guid''{4}'')' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$VMNetwork.ID,$VMNetwork.StampId
+            Write-Verbose -Message "Constructed Grant access VM Network URI: $GrantURI"
+
+            if ($PSCmdlet.ShouldProcess($VMNetwork.Name)) {
+                Invoke-RestMethod -Uri $GrantURI -Method Put -Headers $Headers -Body $Body -ContentType application/json | Out-Null
+            }
+
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
 function Remove-WAPVMNetwork {
     <#
     .SYNOPSIS

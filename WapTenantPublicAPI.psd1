@@ -12,7 +12,7 @@
 RootModule = 'WapTenantPublicAPI'
 
 # Version number of this module.
-ModuleVersion = '0.0.5.5'
+ModuleVersion = '0.0.6.0'
 
 # ID used to uniquely identify this module
 GUID = 'eaa28acf-4a1e-4d0e-96dd-fa36de33a658'
@@ -105,7 +105,16 @@ FunctionsToExport = @(
     'Set-WAPVMNetworkSubnetIPPool',
     'Start-WAPVM',
     'Stop-WAPVM',
-    'Test-WAPSQLDatabaseNameAvailable'
+    'Test-WAPSQLDatabaseNameAvailable',
+    'Get-WAPWebSpace',
+    'Test-WAPWebSiteNameAvailable',
+    'Get-WAPWebSite',
+    'Select-WAPWebSpace',
+    'New-WAPWebSite',
+    'Remove-WAPWebSite',
+    'Get-WAPWebSiteConfiguration',
+    'Get-WAPWebSitePublishingXML',
+    'Restart-WAPWebSite'
 )
 
 # Cmdlets to export from this module

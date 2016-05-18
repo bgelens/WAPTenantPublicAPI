@@ -44,6 +44,19 @@ Get-WAPSQLDatabase -Name 'MyNewDBName' | Reset-WAPSQLDatabaseAdmin #Reset SQL Us
 Get-WAPSQLDatabase -Name 'MyNewDBName' | Resize-WAPSQLDatabase -SizeMB 2048
 Get-WAPSQLDatabase -Name 'MyNewDBName' | Remove-WAPSQLDatabase
 
+#exampl websites
+Get-WAPToken -URL https://sts.bgelens.nl -ADFS -Credential administrator@gelens.int
+Connect-WAPAPI -Url https://api.bgelens.nl -Port 443
+Get-WAPSubscription -Name Test | Select-WAPSubscription
+Get-WAPWebSpace | Select-WAPWebSpace
+Test-WAPWebSiteNameAvailable -Name ben -Verbose
+New-WAPWebSite -Name ben -Mode SharedFree -Verbose
+Get-WAPWebSite
+Get-WAPWebSite -Name ben | Get-WAPWebSitePublishingXML -OutFile C:\Users\gelensb.eu\Desktop\test.xml
+Get-WAPWebSite -Name ben | Get-WAPWebSiteConfiguration
+Get-WAPWebSite -Name ben | Restart-WAPWebSite
+Get-WAPWebSite -Name ben | Remove-WAPWebSite
+
 #example deployment 1 via Tenant Public API
 Get-WAPToken -URL https://sts.bgelens.nl -ADFS -Credential administrator@gelens.int
 Connect-WAPAPI -Url https://api.bgelens.nl -Port 443

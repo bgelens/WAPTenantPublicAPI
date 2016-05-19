@@ -54,6 +54,10 @@ New-WAPWebSite -Name ben -Mode SharedFree -Verbose
 Get-WAPWebSite
 Get-WAPWebSite -Name ben | Get-WAPWebSitePublishingXML -OutFile C:\Users\gelensb.eu\Desktop\test.xml
 Get-WAPWebSite -Name ben | Get-WAPWebSiteConfiguration
+Get-WAPWebSite -Name ben | New-WAPWebSiteGitRepository
+Get-WAPWebSite -Name ben | Get-WAPWebSiteGitRepository
+Get-WAPWebSite -Name ben | Get-WAPWebSitePublishingInfo
+Get-WAPWebSite -Name ben | Remove-WAPWebSiteGitRepository
 Get-WAPWebSite -Name ben | Restart-WAPWebSite
 Get-WAPWebSite -Name ben | Remove-WAPWebSite
 

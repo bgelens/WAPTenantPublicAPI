@@ -2334,8 +2334,7 @@ function Stop-WAPVM {
     [OutputType([void])]
     param (
         [Parameter(Mandatory, ValueFromPipeline)]
-        [ValidateNotNull()]
-        [PSCustomObject] $VM,
+        [ValidateNotNull()][PSCustomObject] $VM,
 
         [Switch] $RunAsynchronously,
 
@@ -3261,6 +3260,141 @@ function Restart-WAPWebSite {
             Write-Verbose -Message "Constructed WebSite URI: $URI"
 
             Invoke-RestMethod -Uri $URI -Headers $script:Headers -Method Post
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $script:OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Get-WAPWebSiteGitRepository {
+    [cmdletbinding()]
+    [outputtype([system.string])]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [System.Management.Automation.PSTypeName('WAP.WebSite')] $Website
+    )
+    process {
+        try {
+            if ($script:IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+            PreFlight -IncludeConnection -IncludeSubscription -IncludeWebSpace
+
+            $URI = '{0}:{1}/{2}/services/WebSpaces/{3}/sites/{4}/repository' -f $script:PublicTenantAPIUrl,$script:Port,$script:Subscription.SubscriptionId,$script:WebSpace.Name,$Website.Name
+            Write-Verbose -Message "Constructed WebSite URI: $URI"
+
+            Invoke-RestMethod -Uri $URI -Headers $script:Headers -Method Get -ContentType 'application/json'
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($script:IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $script:OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function New-WAPWebSiteGitRepository {
+    [cmdletbinding()]
+    [outputtype([void],[System.String])]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [System.Management.Automation.PSTypeName('WAP.WebSite')] $Website,
+
+        [switch] $PassThru
+    )
+    process {
+        try {
+            if ($script:IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+            PreFlight -IncludeConnection -IncludeSubscription -IncludeWebSpace
+
+            $URI = '{0}:{1}/{2}/services/WebSpaces/{3}/sites/{4}/repository' -f $script:PublicTenantAPIUrl,$script:Port,$script:Subscription.SubscriptionId,$script:WebSpace.Name,$Website.Name
+            Write-Verbose -Message "Constructed WebSite URI: $URI"
+
+            $null = Invoke-RestMethod -Uri $URI -Headers $script:Headers -Method Post -ContentType 'application/json'
+            if ($PassThru) {
+                $Website | Get-WAPWebSiteGitRepository
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($script:IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $script:OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Remove-WAPWebSiteGitRepository {
+    [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [System.Management.Automation.PSTypeName('WAP.WebSite')] $Website,
+
+        [Switch] $Force
+    )
+    process {
+        try {
+            if ($script:IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription -IncludeWebSpace
+
+            $URI = '{0}:{1}/{2}/services/WebSpaces/{3}/sites/{4}/repository' -f $script:PublicTenantAPIUrl,$script:Port,$script:Subscription.SubscriptionId,$script:WebSpace.Name,$Website.Name
+            Write-Verbose -Message "Constructed WebSite URI: $URI"
+
+            if ($Force -or $PSCmdlet.ShouldProcess($Website.Name)) {
+                Invoke-RestMethod -Uri $URI -Headers $script:Headers -Method Delete
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $script:OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Get-WAPWebSitePublishingInfo {
+    [cmdletbinding()]
+    [outputtype([pscustomobject])]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [System.Management.Automation.PSTypeName('WAP.WebSite')] $Website
+    )
+    process {
+        try {
+            if ($script:IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription -IncludeWebSpace
+
+            $URI = $Website.SelfLink + '?propertiesToInclude=RepositoryUri,PublishingUsername,PublishingPassword,Metadata,ScmType'
+            Write-Verbose -Message "Constructed WebSite URI: $URI"
+            
+            (Invoke-RestMethod -Uri $URI -Headers $script:Headers -Method Get).SiteProperties.Properties
+
         } catch {
             Write-Error -ErrorRecord $_
         } finally {

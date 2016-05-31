@@ -1548,6 +1548,8 @@ function Remove-WAPVMNetwork {
         [ValidateNotNull()]
         [PSCustomObject] $VMNetwork,
 
+        [Switch] $RunAsynchronously,
+
         [Switch] $Force
     )
     #// TODO: for now, only support pipeline VMNetwork. Later support Name/ID?
@@ -1565,7 +1567,12 @@ function Remove-WAPVMNetwork {
 
             PreFlight -IncludeConnection -IncludeSubscription
 
-            $RemURI = '{0}:{1}/{2}/services/systemcenter/vmm/VMNetworks(ID=guid''{3}'',StampId=guid''{4}'')' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$VMNetwork.ID,$VMNetwork.StampId
+            $RemURI = '{0}:{1}/{2}/services/systemcenter/vmm/VMNetworks(ID=guid''{3}'',StampId=guid''{4}'')?RunAsynchronously=' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$VMNetwork.ID,$VMNetwork.StampId
+            if ($RunAsynchronously) {
+                $RemURI = $RemURI + '1'
+            } else {
+                $RemURI = $RemURI + '0'
+            }
             Write-Verbose -Message "Constructed Remove VM Network URI: $RemURI"
 
             if ($Force -or $PSCmdlet.ShouldProcess($VMNetwork.Name)) {
@@ -2541,6 +2548,55 @@ function Get-WAPVMRoleVMSize {
     
 }
 
+#region Admin functions
+function Get-WAPAdminSubscription {
+    [OutputType([PSCustomObject])]
+    [CmdletBinding(DefaultParameterSetName = 'List')]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName, ParameterSetName = 'Id')]
+        [ValidateNotNullOrEmpty()]
+        [String] $SubscriptionId
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection
+
+            if ($SubscriptionId) {
+                $URI = '{0}:{1}/subscriptions/{2}' -f $PublicTenantAPIUrl,$Port,$SubscriptionId
+            } else {
+                $URI = '{0}:{1}/subscriptions' -f $PublicTenantAPIUrl,$Port
+            }
+            Write-Verbose -Message "Constructed Subscription URI: $URI"
+            $Subscriptions = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
+
+            if ($SubscriptionId) {
+                $Subscriptions.PSObject.TypeNames.Insert(0,'WAP.AdminSubscription')
+                Write-Output -InputObject $Subscriptions
+            } else {
+                foreach ($S in $Subscriptions.Items) {
+                    $S.PSObject.TypeNames.Insert(0,'WAP.AdminSubscription')
+                    Write-Output -InputObject $S
+                }
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+#endregion Admin functions
+
+#region SQL DB
 function Get-WAPSQLDatabase {
     [OutputType([PSCustomObject])]
     [CmdletBinding(DefaultParameterSetName = 'List')]
@@ -2946,6 +3002,7 @@ function Remove-WAPSQLDatabase {
         }
     }
 }
+#endregion SQL DB
 
 #region Websites
 function Get-WAPWebSpace {

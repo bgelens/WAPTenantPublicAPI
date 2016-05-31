@@ -12,7 +12,7 @@
 RootModule = 'WapTenantPublicAPI'
 
 # Version number of this module.
-ModuleVersion = '0.0.6.1'
+ModuleVersion = '0.0.6.3'
 
 # ID used to uniquely identify this module
 GUID = 'eaa28acf-4a1e-4d0e-96dd-fa36de33a658'
@@ -118,7 +118,8 @@ FunctionsToExport = @(
     'New-WAPWebSiteGitRepository',
     'Get-WAPWebSiteGitRepository',
     'Remove-WAPWebSiteGitRepository',
-    'Get-WAPWebSitePublishingInfo'
+    'Get-WAPWebSitePublishingInfo',
+    'Get-WAPAdminSubscription'
 )
 
 # Cmdlets to export from this module

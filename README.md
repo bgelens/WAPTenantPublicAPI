@@ -28,6 +28,10 @@ The function is based on the example WAP functions found in the Admin-API instal
 
 Both Tenant and Admin should have the same relying party settings configured.
 
+## Admin API functions
+Started with implementation of Admin API functions. These functions are prefixed with the noun WAPAdmin.
+- Get-WAPAdminSubscription [-SubscriptionId 'subscriptionid']
+
 Examples
 --------
 ```powershell

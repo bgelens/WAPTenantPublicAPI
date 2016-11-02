@@ -12,7 +12,7 @@
 RootModule = 'WapTenantPublicAPI'
 
 # Version number of this module.
-ModuleVersion = '0.0.6.3'
+ModuleVersion = '0.0.7.0'
 
 # ID used to uniquely identify this module
 GUID = 'eaa28acf-4a1e-4d0e-96dd-fa36de33a658'
@@ -27,7 +27,7 @@ CompanyName = 'Unknown'
 Copyright = '(c) 2015 Ben Gelens. All rights reserved.'
 
 # Description of the functionality provided by this module
-Description = 'Windows Azure Pack - Easily deploy VM Roles / Cloud Services / SQL Databases / Virtual Networks by interacting with the Tenant Public API'
+Description = 'Windows Azure Pack - Easily deploy VM Roles / Standalone VMs / Cloud Services / SQL Databases / Virtual Networks by interacting with the Tenant Public API'
 
 # Minimum version of the Windows PowerShell engine required by this module
 PowerShellVersion = '4.0'
@@ -119,7 +119,11 @@ FunctionsToExport = @(
     'Get-WAPWebSiteGitRepository',
     'Remove-WAPWebSiteGitRepository',
     'Get-WAPWebSitePublishingInfo',
-    'Get-WAPAdminSubscription'
+    'Get-WAPAdminSubscription',
+    'Get-WAPAdminCloud',
+    'Get-WAPVMTemplate',
+    'Remove-WAPVM',
+    'New-WAPVM'
 )
 
 # Cmdlets to export from this module
@@ -174,3 +178,4 @@ HelpInfoURI = 'https://github.com/bgelens/WAPTenantPublicAPI'
 # DefaultCommandPrefix = ''
 
 }
+

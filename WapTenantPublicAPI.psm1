@@ -2548,6 +2548,202 @@ function Get-WAPVMRoleVMSize {
     
 }
 
+function Get-WAPVMTemplate {
+    <#
+    .SYNOPSIS
+        Retrieves VM Template Items asigned to Tenant user Subscription from Azure Pack TenantPublic or Tenant API.
+
+    .PARAMETER Name
+        When Name is specified, only the VM Template Item with the specified name is returned.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>Get-WAPVMTemplate
+
+        This will retrieve all VM Template Items tight to the subscription.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>Get-WAPVMTemplate -Name 'MyAwesomeVMTemplate'
+
+        This will retreive only the VM Template Item with the same name as specified.
+    #>
+    [CmdletBinding(DefaultParameterSetName='List')]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory, ParameterSetName='Name')]
+        [ValidateNotNullOrEmpty()]
+        [String] $Name
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+
+            $URI = '{0}:{1}/{2}/services/systemcenter/vmm/VMTemplates' -f $script:PublicTenantAPIUrl,$script:Port,$script:Subscription.SubscriptionId
+            Write-Verbose -Message "Constructed VMTemplate Item URI: $URI"
+
+            $TemplateItems = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
+            foreach ($T in $TemplateItems.value) {
+                if ($PSCmdlet.ParameterSetName -eq 'Name' -and $T.Name -ne $Name) {
+                    continue
+                }
+                $T.PSObject.TypeNames.Insert(0,'WAP.VMTemplate')
+                Write-Output -InputObject $T 
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function New-WAPVM {
+    [CmdletBinding(SupportsShouldProcess)]
+    param (
+        [Parameter(Mandatory)]
+        [System.Management.Automation.PSTypeName('WAP.VMTemplate')] $Template,
+
+        [Parameter(Mandatory)]
+        [System.Management.Automation.PSTypeName('VMM.Clouds')] $Cloud,
+
+        [Parameter(Mandatory)]
+        [System.Management.Automation.PSTypeName('WAP.VMNetwork')] $VMNetwork,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [String] $Name,
+
+        [Parameter(Mandatory)]
+        [PSCredential] $Credential,
+
+        [Switch] $RunAsynchronously,
+
+        [Switch] $StartVM
+    )
+    process {
+        try {
+            if ($script:IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            $URI = '{0}:{1}/{2}/services/systemcenter/vmm/VirtualMachines?RunAsynchronously=' -f $script:PublicTenantAPIUrl,$script:Port,$script:Subscription.SubscriptionId
+            if ($RunAsynchronously) {
+                $URI = $URI + '1'
+            } else {
+                $URI = $URI + '0'
+            }
+            Write-Verbose -Message "Constructed VM Deploy URI: $URI"
+            #https://msdn.microsoft.com/en-us/library/jj643289.aspx
+            #https://msdn.microsoft.com/en-us/library/dn470013.aspx
+            
+            $Body = @{
+                StampId = $Template.StampId
+                Name = $Name
+                CloudId = $Cloud.Id
+                VMTemplateId = $Template.ID
+                ComputerName = $Name
+                LocalAdminUserName = $Credential.UserName
+                LocalAdminPassword = $Credential.GetNetworkCredential().Password
+                NewVirtualNetworkAdapterInput = @(
+                    @{
+                        VMNetworkName  = $VMNetwork.Name
+                    }
+                )
+            }
+
+            if ($StartVM) {
+                [void] $Body.Add('StartVM',$true)
+            } else {
+                [void] $Body.Add('StartVM',$false)
+            }
+
+            
+            $Body = $Body | ConvertTo-Json -Depth 100
+
+            Write-Verbose -Message "Constructed body: $($Body | Out-String)"
+
+            if ($PSCmdlet.ShouldProcess($Name)) {
+                $VM = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Post -Body $Body -ContentType application/json
+                $VM.PSObject.TypeNames.Insert(0,'WAP.VM')
+                Write-Output -InputObject $VM
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Remove-WAPVM {
+    [CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
+    param (
+        [Parameter(Mandatory,ValueFromPipeline)]
+        [System.Management.Automation.PSTypeName('WAP.VM')] $VM,
+
+        [Switch] $Force,
+
+        [Switch] $RunAsynchronously
+    )
+    process {
+        try {
+            if ($script:IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+
+            $RemURI = '{0}:{1}/{2}/services/systemcenter/vmm/VirtualMachines(ID=guid''{3}'',StampId=guid''{4}'')?RunAsynchronously=' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$VM.ID,$VM.StampId
+            if ($RunAsynchronously) {
+                $RemURI = $RemURI + '1'
+            } else {
+                $RemURI = $RemURI + '0'
+            }
+            Write-Verbose -Message "Constructed Remove VM URI: $RemURI"
+
+            if ($Force -or $PSCmdlet.ShouldProcess($VM.Name)) {
+                if ($VM.Status -eq 'Running') {
+                    $VM | Stop-WAPVM -TurnOff -Force
+                }
+                Invoke-RestMethod -Uri $RemURI -Method Delete -Headers $Headers | Out-Null
+            }
+
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
 #region Admin functions
 function Get-WAPAdminSubscription {
     [OutputType([PSCustomObject])]
@@ -2590,6 +2786,45 @@ function Get-WAPAdminSubscription {
             #Change Certificate Policy to the original
             if ($IgnoreSSL) {
                 [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Get-WAPAdminCloud {
+    [OutputType([PSCustomObject])]
+    [CmdletBinding(DefaultParameterSetName='List')]
+    param (
+        [Parameter(Mandatory,ValueFromPipeline,ParameterSetName='Named')]
+        [ValidateNotNullOrEmpty()]
+        [System.String] $Name
+    )
+    process {
+        try {
+            if ($script:IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection
+            $URI = '{0}:{1}/services/systemcenter/SC2012R2/VMM/Microsoft.Management.Odata.svc/Clouds()' -f $script:PublicTenantAPIUrl,$script:Port
+            Write-Verbose -Message "Constructed Cloud URI: $URI"
+
+            $Clouds = Invoke-RestMethod -Uri $URI -Headers $script:Headers -Method Get
+            foreach ($C in $Clouds.Value) {
+                if ($PSCmdlet.ParameterSetName -eq 'Named' -and $C.Name -ne $Name) {
+                    continue
+                }
+                $C.PSObject.TypeNames.Insert(0,'WAP.AdminCloud')
+                Write-Output -InputObject $C
+            }
+        } catch {
+            Write-Error -ErrorRecord $_
+        } finally {
+            #Change Certificate Policy to the original
+            if ($script:IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $script:OriginalCertificatePolicy
             }
         }
     }

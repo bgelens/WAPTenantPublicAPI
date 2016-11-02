@@ -153,6 +153,36 @@
                 </ListEntries>
             </ListControl>
         </View>
+        
+        <View>
+            <Name>WAP.VMTemplate</Name>
+            <ViewSelectedBy>
+                <TypeName>WAP.VMTemplate</TypeName>
+            </ViewSelectedBy>
+             <ListControl>
+                <ListEntries>
+                    <ListEntry>
+                        <ListItems>
+                            <ListItem>
+                                <PropertyName>Name</PropertyName>
+                            </ListItem>
+                            <ListItem>
+                                <PropertyName>Memory</PropertyName>
+                            </ListItem>
+                            <ListItem>
+                                <PropertyName>CPUCount</PropertyName>
+                            </ListItem>
+                            <ListItem>
+                                <PropertyName>OperatingSystem</PropertyName>
+                            </ListItem>
+                            <ListItem>
+                                <PropertyName>Generation</PropertyName>
+                            </ListItem>
+                        </ListItems>
+                    </ListEntry>
+                </ListEntries>
+            </ListControl>
+        </View>
 
         <View>
             <Name>WAP.CloudService</Name>

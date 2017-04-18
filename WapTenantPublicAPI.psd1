@@ -12,7 +12,7 @@
 RootModule = 'WapTenantPublicAPI'
 
 # Version number of this module.
-ModuleVersion = '0.0.7.0'
+ModuleVersion = '0.0.7.1'
 
 # ID used to uniquely identify this module
 GUID = 'eaa28acf-4a1e-4d0e-96dd-fa36de33a658'

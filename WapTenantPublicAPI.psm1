@@ -557,6 +557,13 @@ function Get-WAPGalleryVMRole {
     .PARAMETER Name
         When Name is specified, only the VM Role Gallery Item with the specified name is returned.
 
+    .PARAMETER Version
+        When Version is specified, only the VM Role Gallery Item with the specified version is returned.
+        
+    .PARAMETER Publisher
+        When Publisher is specified, only the VM Role Gallery Item with the specified Publisher is returned.
+
+
     .EXAMPLE
         PS C:\>$URL = 'https://publictenantapi.mydomain.com'
         PS C:\>$creds = Get-Credential
@@ -573,9 +580,29 @@ function Get-WAPGalleryVMRole {
         PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
         PS C:\>Connect-WAPAPI -URL $URL
         PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
-        PS C:\>Get-WAPGalleryVMRole -Name 'MyAwesomeVMRole'
+        PS C:\>Get-WAPGalleryVMRole -Name 'MyAwesomeVMRole' -version '1.9.21.17'
 
         This will retreive only the VM Role Gallery Item with the same name as specified.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>Get-WAPGalleryVMRole -Name '*Awesome*' -version '1.9.21.17'
+
+        This will retreive the VM Role Gallery Item(s) with the specified wildcard name and exact version.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>Get-WAPGalleryVMRole -version '1.9.21.17' -Publisher 'AwesomePublisher'
+
+        This will retreive all the VM Role Gallery Item with the specified version and publisher. 
     #>
     [CmdletBinding(DefaultParameterSetName='List')]
     [OutputType([PSCustomObject])]
@@ -584,9 +611,11 @@ function Get-WAPGalleryVMRole {
         [ValidateNotNullOrEmpty()]
         [String] $Name,
 
-        [Parameter(ParameterSetName='Name')]
         [ValidateNotNullOrEmpty()]
-        [String] $Version
+        [String] $Version,
+
+        [ValidateNotNullOrEmpty()]
+        [String] $Publisher
     )
     process {
         try {
@@ -604,10 +633,13 @@ function Get-WAPGalleryVMRole {
             $GalleryItems = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
 
             foreach ($G in $GalleryItems.value) {
-                if ($PSCmdlet.ParameterSetName -eq 'Name' -and $G.Name -ne $Name) {
+                if ($PSCmdlet.ParameterSetName -eq 'Name' -and $G.Name -notlike $Name) {
                     continue
                 }
                 if ($Version -and $G.Version -ne $Version) {
+                    continue
+                }
+                if ($Publisher -and $G.Publisher -ne $Publisher) {
                     continue
                 }
                 $GIResDEFUri = '{0}:{1}/{2}/{3}/?api-version=2013-03' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$G.ResourceDefinitionUrl
@@ -681,19 +713,29 @@ function Get-WAPVMRoleOSDisk {
             $OSDiskParam = $Categories | ForEach-Object -Process {$_.Parameters} | Where-Object -FilterScript {$_.Type -eq 'OSVirtualHardDisk'}
 
             $Images = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
+            Write-Verbose "Images are : $($Images.Value)"
             foreach ($I in $Images.value) {
                 $Tags = $I.tag
-                # // TODO: Compare-Object could have 0 results for sideindicator. This will throw an error when strictmode is on!!!
-                if ($null -eq (Compare-Object -ReferenceObject $Tags -DifferenceObject $OSDiskParam.ImageTags).SideIndicator) {
-                    if ($I.enabled -eq $false) {
+                # We get all common tags between the library OS Disk tags and the VmRole requried tags.
+                $CompareTags = Compare-Object -ReferenceObject $Tags -DifferenceObject $OSDiskParam.ImageTags -IncludeEqual -ExcludeDifferent -PassThru
+
+                if ($null -ne $CompareTags) {
+                    # If the common tags match perfectly all the Vmrole required tags, then we have a winner.
+                    if ($null -eq (Compare-Object -ReferenceObject $CompareTags -DifferenceObject $OSDiskParam.ImageTags -PassThru)) {
+                        if ($I.enabled -eq $false) {
+                            continue
+                        }
+                        $I.AddedTime = [datetime] $I.AddedTime
+                        $I.ModifiedTime = [datetime] $I.ModifiedTime
+                        $I.ReleaseTime = [datetime] $I.ReleaseTime
+                        $I.PSObject.TypeNames.Insert(0,'WAP.GI.OSDisk')
+                        Write-Output -InputObject $I
+                    } else {
                         continue
                     }
-                    $I.AddedTime = [datetime] $I.AddedTime
-                    $I.ModifiedTime = [datetime] $I.ModifiedTime
-                    $I.ReleaseTime = [datetime] $I.ReleaseTime
-                    $I.PSObject.TypeNames.Insert(0,'WAP.GI.OSDisk')
-                    Write-Output -InputObject $I
-                } else {
+                }
+                else
+                {
                     continue
                 }
             }

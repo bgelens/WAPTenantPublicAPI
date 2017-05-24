@@ -1759,7 +1759,7 @@ function New-WAPVMRoleParameterObject {
                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $($VMNetwork.Name) -Force
             } elseif ($P.Name -eq 'VMRoleNetworkRef') {
                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $($VMNetwork.Name) -Force
-            }elseif ($P.DefaultValue) {
+            } elseif ($P.DefaultValue) {
                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $P.DefaultValue -Force
             } elseif ($Interactive) {
                 $result = Read-Host -Prompt "Enter a value for $($P.Name) of type $($P.Type)"

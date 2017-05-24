@@ -3744,6 +3744,146 @@ function Get-WAPWebSitePublishingInfo {
 
 #endregion
 
+#region Disk
+
+function Get-WAPVMRoleVMDisk {
+    <#
+    .SYNOPSIS
+        Retrieves Disk information for the named CloudService from Azure Pack TenantPublic or Tenant API.
+
+    .PARAMETER CloudServiceName
+        The name of the cloud service to get VM information from.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>Get-WAPSubscription -Name 'MySubscription' | Select-WAPSubscription
+        PS C:\>Get-WAPCloudService -Name DCs | Get-WAPVMroleVMDisk
+
+        This will get the Disk information for the DCs cloud service deployment.
+    #>
+    [CmdletBinding(DefaultParameterSetName='List')]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Alias('Name','VMRoleName')]
+        [ValidateNotNullOrEmpty()]
+        [String] $CloudServiceName
+    )
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+
+            PreFlight -IncludeConnection -IncludeSubscription
+            # Note we copy the WAPack Tenant Portal behaviour where the $CloudServiceName and $VMRoleName are identical and there is only 1 VMRole per CloudService
+            $ParentVM = Get-WAPCloudService -Name $CloudServiceName | Get-WapVMRoleVM
+            Write-Verbose $ParentVM.Id
+            Write-Verbose $ParentVM.ComputerName
+            $URI = '{0}:{1}/{2}/CloudServices/{3}/Resources/MicrosoftCompute/VMRoles/{3}/VMs/{4}/Disks?api-version=2013-03' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$CloudServiceName,$ParentVM.Id
+            Write-Verbose -Message "Constructed VMRole URI: $URI"
+
+            $Disks = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
+            foreach ($D in $Disks.value) {
+                Add-Member -InputObject $D -MemberType NoteProperty -Name ParentVMID -Value $ParentVM.Id
+                Add-Member -InputObject $D -MemberType NoteProperty -Name ParentVMName -Value $ParentVM.ComputerName
+                Add-Member -InputObject $D -MemberType NoteProperty -Name ParentCloudService -Value $CloudServiceName
+                $D.PSObject.TypeNames.Insert(0,'WAP.DISK')
+                Write-Output -InputObject $D
+            }
+
+        } 
+        catch {
+            Write-Error -ErrorRecord $_
+        } 
+        
+        finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+function Expand-WAPVMRoleVMDisk {
+    <#
+    .SYNOPSIS
+        Expands an existing VM Disk.
+
+    .PARAMETER Disk
+        Object acquired with Get-WAPVMRoleVMDisk.
+
+    .PARAMETER Size
+        New size in GB of the disk. Note this can only increase, never decrease, the current size
+
+    .EXAMPLE
+
+        $Service = Get-WAPCloudService -Name MyServiceName  
+        $Disk = $Service | Get-WAPVMRoleVMDisk | Where DataVirtualHardDiskImage -match DDrive
+        Expand-WAPVMRoleVMDisk -Disk $Disk -Size 50 
+
+        This will expand the VHD named DDrive to 50GB
+    #>
+    [CmdletBinding(DefaultParameterSetName='List')]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [Alias('DiskObject')]
+        [ValidateNotNullOrEmpty()]
+        [PSCustomObject]
+        $Disk,
+
+        [int]
+        [ValidateRange(0,2000)]
+        $Size
+    )
+    Begin{
+        if (!($Disk.pstypenames.Contains('WAP.DISK'))) {
+            throw 'Object bound to Disk parameter is of the wrong type'
+        }
+    }
+    process {
+        try {
+            if ($IgnoreSSL) {
+                Write-Warning -Message 'IgnoreSSL defined by Connect-WAPAPI, Certificate errors will be ignored!'
+                #Change Certificate Policy to ignore
+                IgnoreSSL
+            }
+            $SizeInMB = $Size * 1024
+            PreFlight -IncludeConnection -IncludeSubscription
+            # Note we copy the WAPack Tenant Portal behaviour where the $CloudServiceName and $VMRoleName are identical and there is only 1 VMRole per CloudService
+
+            $URI = '{0}:{1}/{2}/CloudServices/{3}/Resources/MicrosoftCompute/VMRoles/{3}/VMs/{4}/Disks/{5}?api-version=2013-03' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$Disk.ParentCloudService,$Disk.ParentVMID,$Disk.Id
+            Write-Verbose -Message "Constructed VMRole URI: $URI"
+
+            $Disk.DiskSize = $SizeInMB.ToString()
+            Write-Verbose $Disk.DiskSize
+            $DiskJSON = $Disk | Select Id,DiskSize | ConvertTo-Json
+            Write-Verbose $DiskJSON
+            Invoke-RestMethod -Uri $URI -Headers $Headers -Method PATCH -Body $DiskJSON -ContentType application/JSON
+            Write-Output $Disk
+
+        } 
+        catch {
+            Write-Error -ErrorRecord $_
+        } 
+        
+        finally {
+            #Change Certificate Policy to the original
+            if ($IgnoreSSL) {
+                [System.Net.ServicePointManager]::CertificatePolicy = $OriginalCertificatePolicy
+            }
+        }
+    }
+}
+
+#endregion
+
 Export-ModuleMember -Function *-WAP*
 Export-ModuleMember -Variable Token,Headers,PublicTenantAPIUrl,Port,IgnoreSSL,Subscription 
 

@@ -1757,6 +1757,8 @@ function New-WAPVMRoleParameterObject {
                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value 'domain\username:password' -Force
             } elseif ($P.Type -eq 'Network') {
                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $($VMNetwork.Name) -Force
+            } elseif ($P.Name -eq 'VMRoleNetworkRef') {
+                Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $($VMNetwork.Name) -Force
             } elseif ($P.DefaultValue) {
                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $P.DefaultValue -Force
             } elseif ($Interactive) {

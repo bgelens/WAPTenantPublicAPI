@@ -3792,6 +3792,7 @@ function Get-WAPVMRoleDisk {
             foreach ($I in $Images.value) {
                 Add-Member -InputObject $I -MemberType NoteProperty -Name ParentViewDefinition -Value $ViewDef.ViewDefinition
                 Write-Output -InputObject $I
+                $I.PSObject.TypeNames.Insert(0,'WAP.DISKIMAGE')
             }
         } catch {
             Write-Error -ErrorRecord $_
@@ -3914,6 +3915,10 @@ function Expand-WAPVMRoleVMDisk {
             }
             $SizeInMB = $Size * 1024
             PreFlight -IncludeConnection -IncludeSubscription
+            $ParentVM = Get-WapVMRoleVM -CloudServiceName $Disk.ParentCloudService 
+            If($ParentVM.RuntimeState -ne "Stopped"){
+                throw "Disk may not be expanded whilst machine is running"
+            }
             # Note we copy the WAPack Tenant Portal behaviour where the $CloudServiceName and $VMRoleName are identical and there is only 1 VMRole per CloudService
 
             $URI = '{0}:{1}/{2}/CloudServices/{3}/Resources/MicrosoftCompute/VMRoles/{3}/VMs/{4}/Disks/{5}?api-version=2013-03' -f $PublicTenantAPIUrl,$Port,$Subscription.SubscriptionId,$Disk.ParentCloudService,$Disk.ParentVMID,$Disk.Id
@@ -3973,6 +3978,11 @@ function New-WAPVMRoleVMDisk {
         [PSCustomObject]
         $Disk
     )
+    Begin{
+        if (!($Disk.pstypenames.Contains('WAP.DISKIMAGE'))) {
+            throw 'Object bound to Disk parameter is of the wrong type'
+        }
+    }
     process {
         try {
             if ($IgnoreSSL) {
@@ -3985,6 +3995,9 @@ function New-WAPVMRoleVMDisk {
             # Note we copy the WAPack Tenant Portal behaviour where the $CloudServiceName and $VMRoleName are identical and there is only 1 VMRole per CloudService
             $Service = Get-WAPCloudService -Name $CloudServiceName
             $ParentVM = $Service | Get-WapVMRoleVM
+            If($ParentVM.RuntimeState -ne "Stopped"){
+                throw "Disk may not be added to running machine"
+            }
             #Set the LUN
             $AllDisks = $Service | Get-WAPVMRoleVMDisk | Select DiskLun
             $Max = $AllDisks | Measure -Property DiskLun -Maximum
@@ -4012,7 +4025,68 @@ function New-WAPVMRoleVMDisk {
     }
 }
 
+function Invoke-WAPVMRoleVMDiskExpansion{
+    <#
+    .SYNOPSIS
+        Stops a WAP VM, expands an existing VM Disk and then restarts the VM.
+
+    .PARAMETER Disk
+        Object acquired with Get-WAPVMRoleVMDisk.
+
+    .PARAMETER Size
+        New size in GB of the disk. Note this can only increase, never decrease, the current size
+
+    .EXAMPLE
+
+        $Service = Get-WAPCloudService -Name MyServiceName  
+        $Disk = $Service | Get-WAPVMRoleVMDisk | Where DataVirtualHardDiskImage -match DDrive
+        Invoke-WAPVMRoleVMDiskExpansion -Disk $Disk -Size 50 
+
+        This will stop the VM, expand the VHD named DDrive to 50GB and then restart the VM. 
+    #>
+[CmdletBinding(SupportsShouldProcess=$True)]
+Param(
+   [Parameter(Mandatory=$True)]
+    [PSCustomObject]
+    $Disk,
+
+    [Parameter(Mandatory=$True)]
+    [int]
+    [ValidateRange(1,2048)]
+    $Size
+)
+    Begin{
+        if (!($Disk.pstypenames.Contains('WAP.DISKIMAGE'))) {
+            throw 'Object bound to Disk parameter is of the wrong type'
+        }
+    }
+    Process{
+        $WarningPreference = 'SilentlyContinue'
+        $CloudServiceName = $Disk.ParentCloudService
+        $VM = Get-WAPVMRoleVM -CloudServiceName $CloudServiceName
+        Write-Verbose "Stopping VM"
+        $VM | Stop-WAPVM -Confirm:$false
+        While($VM.RuntimeState -ne "Stopped"){
+            $VM = Get-WAPVMRoleVM -CloudServiceName $CloudServiceName
+            Sleep 2
+            Write-Verbose "Waiting to Stop"
+        }
+
+        Write-Verbose "Expanding Disk"
+        Expand-WAPVMRoleVMDisk -Disk $Disk -Size $Size
+
+        While($VM.RuntimeState -ne "Stopped"){
+            $VM = Get-WAPVMRoleVM -CloudServiceName $CloudServiceName
+            Sleep 2
+            Write-Verbose "Waiting to Stop"
+        }
+
+        $VM | Start-WAPVM
+    }
+}
+
 #endregion
+
 
 Export-ModuleMember -Function *-WAP*
 Export-ModuleMember -Variable Token,Headers,PublicTenantAPIUrl,Port,IgnoreSSL,Subscription 

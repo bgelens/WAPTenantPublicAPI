@@ -131,7 +131,7 @@ C:\>Get-WAPCloudService -Name DCs | Get-WAPVMRoleVM | Connect-WAPVMRDP
 #connect to specific VM Role VM instance over RDP
 C:\>Get-WAPCloudService -Name DCs | Get-WAPVMRoleVM -Name SRV001 | Connect-WAPVMRDP
 
-##Disk Functions
+#Disk Functions
 #Get-WAPVMRoleVMDisk
 Fetches all Disks currently attached to a WAPVMRoleVM. Returns WAP.DISK objects
 #Expand-WAPVMRoleVMDisk

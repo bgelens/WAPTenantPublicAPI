@@ -4056,7 +4056,7 @@ Param(
     $Size
 )
     Begin{
-        if (!($Disk.pstypenames.Contains('WAP.DISKIMAGE'))) {
+        if (!($Disk.pstypenames.Contains('WAP.DISK'))) {
             throw 'Object bound to Disk parameter is of the wrong type'
         }
     }

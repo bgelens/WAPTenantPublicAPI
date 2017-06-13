@@ -130,4 +130,17 @@ C:\>Get-WAPCloudService -Name DCs | Get-WAPVMRoleVM | Connect-WAPVMRDP
 
 #connect to specific VM Role VM instance over RDP
 C:\>Get-WAPCloudService -Name DCs | Get-WAPVMRoleVM -Name SRV001 | Connect-WAPVMRDP
+
+#Disk Functions
+#Get-WAPVMRoleVMDisk
+Fetches all Disks currently attached to a WAPVMRoleVM. Returns WAP.DISK objects
+#Expand-WAPVMRoleVMDisk
+Takes a WAP.DISK Object a size in GB, expands the disk to the requested size.
+#Invoke-WAPVMRoleVMDiskExpansion
+Takes a WAP.DISK Object a size in GB. This stops the VM, Invokes the epansion command and then restarts the VM.
+
+#Get-WAPVMRoleDisk
+Fetches all Disks in the subscription. Returns WAP.DISKIMAGE Objects
+#New-WAPVMRoleVMDisk 
+Takes a WAP.DISKIMAGE object and a Cloud Service Name, then mounts attaches the Disk to the VM.
 ```

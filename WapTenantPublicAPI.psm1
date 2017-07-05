@@ -549,6 +549,192 @@ function GetWAPSubscriptionQuota {
     
 }
 
+function Get-WAPSubscriptionQuota{
+    <#
+    .SYNOPSIS
+        Retrieves a VM Role Quota information object (WAP.Quota).
+
+    .PARAMETER Subscription
+        The Subscription(s) you wish to collect quota information for.
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>$Sub = Get-WAPSubscription -Name MySubscription 
+        PS C:\>Get-WAPSubscriptionQuota -Subscription $Sub
+    #>
+[CmdletBinding()]
+Param(
+    [Parameter(
+        Mandatory=$False,
+        ValueFromPipeline=$True,
+        ValueFromPipelineByPropertyName=$True,
+        Position=0
+    )]
+    [System.Management.Automation.PSTypeName('WAP.Subscription')] 
+    $Subscription = (Get-WAPSubscription)
+)
+process{
+    ForEach ($Sub in $Subscription){
+        Select-WAPSubscription -Subscription $Sub
+        $VMs = Get-WAPVM 
+        $Cores = $Vms.CpuCount | Measure-Object -Sum 
+        $Memory = $Vms.Memory | Measure-Object -Sum 
+
+        $Services = $Sub.Services | Select BaseQuotaSettings
+
+        ForEach($Service in $Services){
+            $BaseQuotaSettings = $Service.BaseQuotaSettings
+            ForEach($Setting in $BaseQuotaSettings){ 
+                if($Setting.Key -eq "Clouds"){
+                    [xml]$Data = $Setting.Value 
+                    $Output = $Data.Clouds.Cloud.Quota
+                    $Object = New-Object -Type PsObject -Property @{
+                    SubscriptionName=$Sub.SubscriptionName;
+                    CurrentVms=$Cores.Count;
+                    CurrentCores=$Cores.Sum;
+                    CurrentMemory=$Memory.Sum;
+                    QuotaRoleVMCount=$Output.RoleVMCount;
+                    QuotaMemberVMCount=$Output.MemberVMCount;
+                    QuotaRoleCPUCount=$Output.RoleCPUCount;
+                    QuotaMemberCPUCount=$Output.MemberCPUCount;
+                    QuotaMemberMemory=$Output.MemberMemoryMB;
+                    QuotaRoleMemory=$Output.RoleMemoryMB;
+                    QuotaRoleStorageGB=$Output.RoleStorageGB;
+                    QuotaMemberStorageGB=$Output.MemberStorageGB
+                    }
+                    $Object.PSObject.TypeNames.Insert(0,'WAP.QUOTA')
+                    Write-Output $Object
+                }
+            }
+        }
+    } 
+}
+}
+
+function Get-WAPVMRoleQuotaRequest{
+    <#
+    .SYNOPSIS
+        Gets a WAP.QuotaRequest object - determining whether or not a deployment will succeed. 
+
+    .PARAMETER VMRoleSizeProfile
+        VM Size object to use as the basis.. Acquired via Get-WAPVMRoleVMSize.
+
+    .PARAMETER Size
+        VM Size name. Extra Small, Large, A7 etc.
+
+    .PARAMETER Subscription
+        WAP.SUbscription object to check. If left blank, returns the quota request for all of them. 
+
+    .EXAMPLE
+        PS C:\>$URL = 'https://publictenantapi.mydomain.com'
+        PS C:\>$creds = Get-Credential
+        PS C:\>Get-WAPToken -Credential $creds -URL 'https://sts.adfs.com' -ADFS
+        PS C:\>Connect-WAPAPI -URL $URL
+        PS C:\>$Sub = Get-WAPSubscription -Name 'MySubscription'
+        PS C:\>Get-WAPVMRoleQuotaRequest -Subscription $Sub -Size Large
+        OR
+        PS C:\>Get-WAPVMRoleQuotaRequest -Subscription $Sub -VMRoleSizeProfile (Get-WAPVMRoleVMSize -Name A7)
+
+    #>
+Param(
+    [Parameter(
+        Mandatory=$True,
+        ValueFromPipeline=$True,
+        ValueFromPipelineByPropertyName=$True,
+        Position=0,
+        ParameterSetName = "Size-Object"
+    )]
+    [System.Management.Automation.PSTypeName('WAP.VMRoleSizeProfile')] 
+    $VMRoleSizeProfile,
+
+    [Parameter(
+        Mandatory=$True,
+        ValueFromPipeline=$True,
+        ValueFromPipelineByPropertyName=$True,
+        Position=0,
+        ParameterSetName = "Size-Name"
+    )]
+    [string] 
+    $Size,
+      
+    [Parameter(
+        Mandatory=$False,
+        ValueFromPipeline=$True,
+        ValueFromPipelineByPropertyName=$True,
+        Position=1
+    )]
+    [System.Management.Automation.PSTypeName('WAP.Subscription')] 
+    $Subscription = (Get-WAPSubscription),
+
+    [Parameter(
+        Mandatory=$False,
+        ValueFromPipeline=$True,
+        ValueFromPipelineByPropertyName=$True,
+        Position=2
+    )]
+    [int]
+    $NumberOfNodes = 1
+)
+    begin{
+
+    }
+    process{
+        ForEach ($Sub in $Subscription){
+            Select-WAPSubscription $Sub
+            If($Size){
+                $VMRoleSizeProfile = Get-WAPVMRoleVMSize -Name $Size
+            }
+            If($VMRoleSizeProfile){
+                $Size = $VMRoleSizeProfile.Name
+            }
+            $Limits = Get-WAPSubscriptionQuota -Subscription $Sub
+            $RequestObject = New-Object -TypeName PsObject -Property @{SubscriptionName=$Limits.SubscriptionName;Size=$Size;NumberOfNodes=$NumberOfNodes}
+
+            If($Limits.QuotaRoleMemory){
+                [int] $SizeMem = $VMRoleSizeProfile.MemoryInMB
+                [int] $CurrentMemory = $Limits.CurrentMemory
+                [int] $QuotaMemory = $Limits.QuotaRoleMemory
+                [int] $ExtraMem = $SizeMem * $NumberOfNodes
+                Write-Verbose "MemInRequest:$ExtraMem"
+                $RequestedMemory = $CurrentMemory + ($SizeMem * $NumberOfNodes)
+                Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name MemoryRequired -Value $RequestedMemory -Force
+                Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name QuotaMemory -Value $QuotaMemory -Force
+                Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name MemoryCheck -Value ($QuotaMemory -ge $RequestedMemory) -Force
+            }
+
+            If($Limits.QuotaRoleCPUCount){
+                [int] $SizeCores = $VMRoleSizeProfile.CpuCount
+                [int] $CurrentCores = $Limits.CurrentCores
+                [int] $QuotaCores = $Limits.QuotaRoleCPUCount
+                [int] $ExtraCores = $SizeCores * $NumberOfNodes
+                Write-Verbose "CoresInRequest:$ExtraCores"
+                $RequestedCores = $CurrentCores + ($SizeCores * $NumberOfNodes)
+                Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name CoresRequired -Value $RequestedCores -Force
+                Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name QuotaCores -Value $QuotaCores -Force
+                Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name CoresCheck -Value ($QuotaCores -ge $RequestedCores) -Force
+            }
+
+            If($Limits.QuotaMemberVMCount){
+                [int] $CurrentVMs = $Limits.CurrentVms
+                [int] $QuotaVMs = $Limits.QuotaRoleVMCount
+                Write-Verbose "VMsInRequest:$NumberOfNodes"
+                $RequestedVMs = $CurrentVMs + $NumberOfNodes 
+                Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name RequestedVMs -Value $RequestedVMs -force
+                Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name QuotaVMs -Value $QuotaVMs -force
+                Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name VMCheck -Value ($QuotaVMs -ge $RequestedVMs) -force
+            }
+            $Checks = @($RequestObject.CoresCheck,$RequestObject.MemoryCheck,$RequestObject.VMCheck)
+
+            Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name WithinQuota -Value (@($Checks) -notcontains $False )-force
+            $RequestObject.PSObject.TypeNames.Insert(0,'WAP.QuotaRequest')
+            Write-Output $RequestObject
+        }
+    }
+}
+
 function Get-WAPGalleryVMRole {
     <#
     .SYNOPSIS

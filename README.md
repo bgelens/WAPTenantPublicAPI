@@ -125,6 +125,12 @@ C:\>Get-WAPCloudService -Name DCs | Get-WAPVMRoleVM
 #get additional information for VM Role deployed VM instance
 Get-WAPCloudService -Name DCs | Get-WAPVMroleVM -VMMEnhanced
 
+#get quotas of your subscriptions
+Get-WAPSubscriptionQuota 
+
+#Confirm whether a specific request will meet a quota. 
+Get-WAPSubscription -Name "MySubscription" | Get-WAPVMRoleQuotaRequest -Size "Large" -NumberOfNodes 4
+
 #connect to VM Role VM instances over RDP
 C:\>Get-WAPCloudService -Name DCs | Get-WAPVMRoleVM | Connect-WAPVMRDP
 

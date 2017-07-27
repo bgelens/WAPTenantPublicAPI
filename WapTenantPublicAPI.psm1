@@ -17,9 +17,9 @@ function IgnoreSSL {
     $Provider = New-Object -TypeName Microsoft.CSharp.CSharpCodeProvider
     $null = $Provider.CreateCompiler()
     $Params = New-Object -TypeName System.CodeDom.Compiler.CompilerParameters
-    $Params.GenerateExecutable = $False
-    $Params.GenerateInMemory = $True
-    $Params.IncludeDebugInformation = $False
+    $Params.GenerateExecutable = $false
+    $Params.GenerateInMemory = $true
+    $Params.IncludeDebugInformation = $false
     $Params.ReferencedAssemblies.Add('System.DLL') > $null
     $TASource=@'
         namespace Local.ToolkitExtensions.Net.CertificatePolicy
@@ -53,7 +53,7 @@ function TestJWTClaimNotExpired {
             if ($Token.split('.').count -ne 3) {
                 throw 'Invalid token passed, run Get-WAPToken to fetch a new one'
             }
-            $TokenData = $token.Split('.')[1] | ForEach-Object -Process {
+            $TokenData = $token.Split('.')[1] | foreach-Object -Process {
                 $data = $_ -as [String]
                 $data = $data.Replace('-', '+').Replace('_', '/')
                 switch ($data.Length % 4) {
@@ -549,7 +549,7 @@ function GetWAPSubscriptionQuota {
     
 }
 
-function Get-WAPSubscriptionQuota{
+function Get-WAPSubscriptionQuota {
     <#
     .SYNOPSIS
         Retrieves a VM Role Quota information object (WAP.Quota).
@@ -565,56 +565,62 @@ function Get-WAPSubscriptionQuota{
         PS C:\>$Sub = Get-WAPSubscription -Name MySubscription 
         PS C:\>Get-WAPSubscriptionQuota -Subscription $Sub
     #>
-[CmdletBinding()]
-Param(
-    [Parameter(
-        Mandatory=$False,
-        ValueFromPipeline=$True,
-        ValueFromPipelineByPropertyName=$True,
-        Position=0
-    )]
-    [System.Management.Automation.PSTypeName('WAP.Subscription')] 
-    $Subscription = (Get-WAPSubscription)
-)
-process{
-    ForEach ($Sub in $Subscription){
-        Select-WAPSubscription -Subscription $Sub
-        $VMs = Get-WAPVM 
-        $Cores = $Vms.CpuCount | Measure-Object -Sum 
-        $Memory = $Vms.Memory | Measure-Object -Sum 
+    [CmdletBinding()]
+    param(
+        [Parameter(
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true
+        )]
+        [System.Management.Automation.PSTypeName('WAP.Subscription')] 
+        [PSCustomObject] $Subscription = (Get-WAPSubscription)
+    )
+    process{
 
-        $Services = $Sub.Services | Select BaseQuotaSettings
+        foreach ( $Sub in $Subscription ) {
+            Select-WAPSubscription -Subscription $Sub
 
-        ForEach($Service in $Services){
-            $BaseQuotaSettings = $Service.BaseQuotaSettings
-            ForEach($Setting in $BaseQuotaSettings){ 
-                if($Setting.Key -eq "Clouds"){
-                    [xml]$Data = $Setting.Value 
-                    $Output = $Data.Clouds.Cloud.Quota
-                    $Object = New-Object -Type PsObject -Property @{
-                    SubscriptionName=$Sub.SubscriptionName;
-                    CurrentVms=$Cores.Count;
-                    CurrentCores=$Cores.Sum;
-                    CurrentMemory=$Memory.Sum;
-                    QuotaRoleVMCount=$Output.RoleVMCount;
-                    QuotaMemberVMCount=$Output.MemberVMCount;
-                    QuotaRoleCPUCount=$Output.RoleCPUCount;
-                    QuotaMemberCPUCount=$Output.MemberCPUCount;
-                    QuotaMemberMemory=$Output.MemberMemoryMB;
-                    QuotaRoleMemory=$Output.RoleMemoryMB;
-                    QuotaRoleStorageGB=$Output.RoleStorageGB;
-                    QuotaMemberStorageGB=$Output.MemberStorageGB
+            $VMs = Get-WAPVM 
+            $Cores = $Vms.CpuCount | Measure-Object -Sum 
+            $Memory = $Vms.Memory | Measure-Object -Sum 
+            $Services = $Sub.Services | Select BaseQuotaSettings
+
+            foreach ( $Service in $Services ) {
+                
+                $BaseQuotaSettings = $Service.BaseQuotaSettings
+                
+                foreach ( $Setting in $BaseQuotaSettings ) { 
+                    
+                    if ( $Setting.Key -eq "Clouds" ) {
+
+                        [xml]$Data = $Setting.Value
+                        $Output = $Data.Clouds.Cloud.Quota
+
+                        [pscustomobject] $Object = @{
+                            SubscriptionName = $Sub.SubscriptionName;
+                            CurrentVms = $Cores.Count;
+                            CurrentCores = $Cores.Sum;
+                            CurrentMemory = $Memory.Sum;
+                            QuotaRoleVMCount = $Output.RoleVMCount;
+                            QuotaMemberVMCount = $Output.MemberVMCount;
+                            QuotaRoleCPUCount = $Output.RoleCPUCount;
+                            QuotaMemberCPUCount = $Output.MemberCPUCount;
+                            QuotaMemberMemory = $Output.MemberMemoryMB;
+                            QuotaRoleMemory = $Output.RoleMemoryMB;
+                            QuotaRoleStorageGB = $Output.RoleStorageGB;
+                            QuotaMemberStorageGB = $Output.MemberStorageGB
+                        }
+
+                        $Object.PSObject.TypeNames.Insert( 0,'WAP.QUOTA' )
+
+                        Write-Output $Object
                     }
-                    $Object.PSObject.TypeNames.Insert(0,'WAP.QUOTA')
-                    Write-Output $Object
                 }
             }
-        }
-    } 
-}
+        } 
+    }
 }
 
-function Get-WAPVMRoleQuotaRequest{
+function Get-WAPVMRoleQuotaRequest {
     <#
     .SYNOPSIS
         Gets a WAP.QuotaRequest object - determining whether or not a deployment will succeed. 
@@ -639,97 +645,107 @@ function Get-WAPVMRoleQuotaRequest{
         PS C:\>Get-WAPVMRoleQuotaRequest -Subscription $Sub -VMRoleSizeProfile (Get-WAPVMRoleVMSize -Name A7)
 
     #>
-Param(
-    [Parameter(
-        Mandatory=$True,
-        ValueFromPipeline=$True,
-        ValueFromPipelineByPropertyName=$True,
-        Position=0,
-        ParameterSetName = "Size-Object"
-    )]
-    [System.Management.Automation.PSTypeName('WAP.VMRoleSizeProfile')] 
-    $VMRoleSizeProfile,
+    [CmdletBinding( DefaultParameterSetName="Size-Name" )]
+    param(
+        [Parameter(
+            Mandatory,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true,
+            ParameterSetName = "Size-Object"
+        )]
+        [System.Management.Automation.PSTypeName('WAP.VMRoleSizeProfile')] 
+        [PSCustomObject] $VMRoleSizeProfile,
 
-    [Parameter(
-        Mandatory=$True,
-        ValueFromPipeline=$True,
-        ValueFromPipelineByPropertyName=$True,
-        Position=0,
-        ParameterSetName = "Size-Name"
-    )]
-    [string] 
-    $Size,
+        [Parameter(
+            Mandatory,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true,
+            ParameterSetName = "Size-Name"
+        )]
+        [string] $Size,
       
-    [Parameter(
-        Mandatory=$False,
-        ValueFromPipeline=$True,
-        ValueFromPipelineByPropertyName=$True,
-        Position=1
-    )]
-    [System.Management.Automation.PSTypeName('WAP.Subscription')] 
-    $Subscription = (Get-WAPSubscription),
+        [Parameter(
+            Mandatory,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true
+        )]
+        [System.Management.Automation.PSTypeName('WAP.Subscription')] 
+        [PSCustomObject] $Subscription = (Get-WAPSubscription),
 
-    [Parameter(
-        Mandatory=$False,
-        ValueFromPipeline=$True,
-        ValueFromPipelineByPropertyName=$True,
-        Position=2
-    )]
-    [int]
-    $NumberOfNodes = 1
-)
-    begin{
+        [Parameter(
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true
+        )]
+        [int] $NumberOfNodes = 1
+    )
 
-    }
     process{
-        ForEach ($Sub in $Subscription){
+        foreach ( $Sub in $Subscription ) {
+
             Select-WAPSubscription $Sub
-            If($Size){
+           
+            if ($Size) {
                 $VMRoleSizeProfile = Get-WAPVMRoleVMSize -Name $Size
             }
-            If($VMRoleSizeProfile){
+
+            if ( $VMRoleSizeProfile ) {
                 $Size = $VMRoleSizeProfile.Name
             }
-            $Limits = Get-WAPSubscriptionQuota -Subscription $Sub
-            $RequestObject = New-Object -TypeName PsObject -Property @{SubscriptionName=$Limits.SubscriptionName;Size=$Size;NumberOfNodes=$NumberOfNodes}
 
-            If($Limits.QuotaRoleMemory){
+            $Limits = Get-WAPSubscriptionQuota -Subscription $Sub
+
+            [pscustomobject] $RequestObject = @{
+                SubscriptionName=$Limits.SubscriptionName;
+                Size=$Size;
+                NumberOfNodes=$NumberOfNodes
+            }
+
+            if ( $Limits.QuotaRoleMemory ) {
+
                 [int] $SizeMem = $VMRoleSizeProfile.MemoryInMB
                 [int] $CurrentMemory = $Limits.CurrentMemory
                 [int] $QuotaMemory = $Limits.QuotaRoleMemory
                 [int] $ExtraMem = $SizeMem * $NumberOfNodes
                 Write-Verbose "MemInRequest:$ExtraMem"
                 $RequestedMemory = $CurrentMemory + ($SizeMem * $NumberOfNodes)
+
                 Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name MemoryRequired -Value $RequestedMemory -Force
                 Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name QuotaMemory -Value $QuotaMemory -Force
-                Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name MemoryCheck -Value ($QuotaMemory -ge $RequestedMemory) -Force
+                Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name MemoryCheck -Value ( $QuotaMemory -ge $RequestedMemory ) -Force
+
             }
 
-            If($Limits.QuotaRoleCPUCount){
+            if ( $Limits.QuotaRoleCPUCount ) {
+
                 [int] $SizeCores = $VMRoleSizeProfile.CpuCount
                 [int] $CurrentCores = $Limits.CurrentCores
                 [int] $QuotaCores = $Limits.QuotaRoleCPUCount
                 [int] $ExtraCores = $SizeCores * $NumberOfNodes
                 Write-Verbose "CoresInRequest:$ExtraCores"
                 $RequestedCores = $CurrentCores + ($SizeCores * $NumberOfNodes)
+
                 Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name CoresRequired -Value $RequestedCores -Force
                 Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name QuotaCores -Value $QuotaCores -Force
-                Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name CoresCheck -Value ($QuotaCores -ge $RequestedCores) -Force
+                Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name CoresCheck -Value ( $QuotaCores -ge $RequestedCores ) -Force
+
             }
 
-            If($Limits.QuotaMemberVMCount){
+            if ( $Limits.QuotaMemberVMCount ) {
+
                 [int] $CurrentVMs = $Limits.CurrentVms
                 [int] $QuotaVMs = $Limits.QuotaRoleVMCount
                 Write-Verbose "VMsInRequest:$NumberOfNodes"
                 $RequestedVMs = $CurrentVMs + $NumberOfNodes 
+
                 Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name RequestedVMs -Value $RequestedVMs -force
                 Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name QuotaVMs -Value $QuotaVMs -force
-                Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name VMCheck -Value ($QuotaVMs -ge $RequestedVMs) -force
+                Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name VMCheck -Value ( $QuotaVMs -ge $RequestedVMs ) -force
+
             }
             $Checks = @($RequestObject.CoresCheck,$RequestObject.MemoryCheck,$RequestObject.VMCheck)
 
-            Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name WithinQuota -Value (@($Checks) -notcontains $False )-force
-            $RequestObject.PSObject.TypeNames.Insert(0,'WAP.QuotaRequest')
+            Add-Member -InputObject $RequestObject -MemberType NoteProperty -Name WithinQuota -Value ( @( $Checks ) -notcontains $false )-force
+            $RequestObject.PSObject.TypeNames.Insert( 0,'WAP.QuotaRequest' )
             Write-Output $RequestObject
         }
     }
@@ -895,8 +911,8 @@ function Get-WAPVMRoleOSDisk {
             Write-Verbose -Message "Constructed VHD URI: $URI"
 
             $Sections = $ViewDef.ViewDefinition.Sections
-            $Categories = $Sections | ForEach-Object -Process {$_.Categories}
-            $OSDiskParam = $Categories | ForEach-Object -Process {$_.Parameters} | Where-Object -FilterScript {$_.Type -eq 'OSVirtualHardDisk'}
+            $Categories = $Sections | foreach-Object -Process {$_.Categories}
+            $OSDiskParam = $Categories | foreach-Object -Process {$_.Parameters} | Where-Object -FilterScript {$_.Type -eq 'OSVirtualHardDisk'}
 
             $Images = Invoke-RestMethod -Uri $URI -Headers $Headers -Method Get
             Write-Verbose "Images are : $($Images.Value)"
@@ -1901,8 +1917,8 @@ function New-WAPVMRoleParameterObject {
     }
     if ($PSCmdlet.ShouldProcess($null,'Generating new ParameterObject')) {
         $Sections = $VMRole.ViewDef.ViewDefinition.Sections
-        $Categories = $Sections | ForEach-Object -Process {$_.Categories}
-        $ViewDefParams = $Categories | ForEach-Object -Process {$_.Parameters}
+        $Categories = $Sections | foreach-Object -Process {$_.Categories}
+        $ViewDefParams = $Categories | foreach-Object -Process {$_.Parameters}
         $Output = [pscustomobject]@{}
         foreach ($P in $ViewDefParams) {
             $p | Out-String | Write-Verbose
@@ -1916,7 +1932,7 @@ function New-WAPVMRoleParameterObject {
                 }
                 $values = $values.TrimEnd(',')
                 if ($P.DefaultValue) {
-                    if(($result = Read-Host -Prompt "Press enter to accept default value $($P.DefaultValue) for $($P.Name). Valid entries: $values") -eq ''){
+                    if (($result = Read-Host -Prompt "Press enter to accept default value $($P.DefaultValue) for $($P.Name). Valid entries: $values") -eq ''){
                         Add-Member -InputObject $Output -MemberType NoteProperty -Name $P.Name -Value $P.DefaultValue -Force
                     } else {
                         do {
@@ -2220,7 +2236,7 @@ function New-WAPVMRoleDeployment {
                 throw 'Object bound to ParameterObject parameter is of the wrong type'
             }
 
-            $ParameterObject | Get-Member -MemberType Properties | ForEach-Object -Process {
+            $ParameterObject | Get-Member -MemberType Properties | foreach-Object -Process {
                 if ($null -eq $ParameterObject.($_.name)) {
                     throw "ParameterObject property: $($_.name) is NULL"
                 }
@@ -4102,7 +4118,7 @@ function Expand-WAPVMRoleVMDisk {
             $SizeInMB = $Size * 1024
             PreFlight -IncludeConnection -IncludeSubscription
             $ParentVM = Get-WapVMRoleVM -CloudServiceName $Disk.ParentCloudService 
-            If($ParentVM.RuntimeState -ne "Stopped"){
+            if ($ParentVM.RuntimeState -ne "Stopped"){
                 throw "Disk may not be expanded whilst machine is running"
             }
             # Note we copy the WAPack Tenant Portal behaviour where the $CloudServiceName and $VMRoleName are identical and there is only 1 VMRole per CloudService
@@ -4181,7 +4197,7 @@ function New-WAPVMRoleVMDisk {
             # Note we copy the WAPack Tenant Portal behaviour where the $CloudServiceName and $VMRoleName are identical and there is only 1 VMRole per CloudService
             $Service = Get-WAPCloudService -Name $CloudServiceName
             $ParentVM = $Service | Get-WapVMRoleVM
-            If($ParentVM.RuntimeState -ne "Stopped"){
+            if ($ParentVM.RuntimeState -ne "Stopped"){
                 throw "Disk may not be added to running machine"
             }
             #Set the LUN
@@ -4230,13 +4246,13 @@ function Invoke-WAPVMRoleVMDiskExpansion{
 
         This will stop the VM, expand the VHD named DDrive to 50GB and then restart the VM. 
     #>
-[CmdletBinding(SupportsShouldProcess=$True)]
+[CmdletBinding(SupportsShouldProcess=$true)]
 Param(
-   [Parameter(Mandatory=$True)]
+   [Parameter(Mandatory=$true)]
     [PSCustomObject]
     $Disk,
 
-    [Parameter(Mandatory=$True)]
+    [Parameter(Mandatory=$true)]
     [int]
     [ValidateRange(1,2048)]
     $Size

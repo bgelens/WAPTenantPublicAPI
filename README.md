@@ -1,3 +1,8 @@
+NOTE
+----
+
+(December 7, 2017) I'm unable to maintain this module moving forward. I simply don't have access to Azure Pack anymore and therefore I'm unable to test / validate new code / PR(s). I feel uncomfortable pushing out updates for this module while sailing blind.
+
 WapTenantPublicAPI
 ------------------
 
